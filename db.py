@@ -67,8 +67,13 @@ def _create_pool():
 def _get_pooled_connection():
     """
     Return a connection from the pool, or fallback gracefully to direct_connect()
-    if pool initialization fails or hits a connection limit.
+    if pool initialization fails, hits a connection limit, or is running on Vercel serverless.
     """
+    # Serverless functions spin up/down rapidly and do not persist connection pools cleanly;
+    # on Vercel, prioritize direct connections to avoid stale socket errors.
+    if os.getenv("VERCEL") == "1" or "VERCEL" in os.environ:
+        return direct_connect()
+
     global _pool, _pool_failed
     if not _pool_failed:
         if _pool is None:
@@ -83,8 +88,8 @@ def _get_pooled_connection():
                 conn = _pool.get_connection()
                 if conn and conn.is_connected():
                     return conn
-            except mysql.connector.errors.PoolExhausted as pe:
-                print(f"[db] Pool exhausted ({pe}). Falling back to direct connection.")
+            except mysql.connector.Error as pe:
+                print(f"[db] Pool error ({pe}). Falling back to direct connection.")
             except Exception as exc:
                 print(f"[db] Warning: Failed to get pooled connection ({exc}). Falling back to direct connection.")
 
@@ -99,17 +104,26 @@ def _get_pooled_connection():
 def get_db():
     """
     Get or create the MySQL connection for the current Flask request.
-    Reuses g.db across the request lifecycle; returns from pool on first call.
+    Reuses g.db across the request lifecycle.
+    Falls back immediately to direct mysql.connector.connect() on any error.
     """
     if has_request_context():
         if "db" not in g or g.db is None or not g.db.is_connected():
-            g.db = _get_pooled_connection()
+            try:
+                g.db = _get_pooled_connection()
+            except Exception as e:
+                print(f"[db] Warning: _get_pooled_connection failed ({e}). Falling back to direct_connect.")
+                g.db = direct_connect()
         return g.db
 
     # Outside request context (CLI scripts, background tasks)
     conn = getattr(_local, "conn", None)
     if conn is None or not conn.is_connected():
-        conn = _get_pooled_connection()
+        try:
+            conn = _get_pooled_connection()
+        except Exception as e:
+            print(f"[db] Warning: _get_pooled_connection failed ({e}). Falling back to direct_connect.")
+            conn = direct_connect()
         _local.conn = conn
     return conn
 
@@ -124,14 +138,16 @@ def close_db(e=None):
         db_conn = g.pop("db", None)
         if db_conn is not None:
             try:
-                db_conn.close()  # Returns to pool (does not physically close)
+                if db_conn.is_connected():
+                    db_conn.close()
             except Exception:
                 pass
     else:
         conn = getattr(_local, "conn", None)
         if conn is not None:
             try:
-                conn.close()
+                if conn.is_connected():
+                    conn.close()
             except Exception:
                 pass
             _local.conn = None
