@@ -32,7 +32,7 @@ def gallery(space_id):
         """,
         (user_id, space_id), action_label="GALLERY_FETCH", fetch="all"
     )
-    space = db.run_query("SELECT * FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="GALLERY_SPACE")
+    space = db.run_query("SELECT space_id, name, description, space_type, invite_code FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="GALLERY_SPACE")
     members = db.run_query(
         "SELECT u.user_id, u.username FROM space_members sm JOIN users u ON u.user_id=sm.user_id WHERE sm.space_id=%s",
         (space_id,), action_label="GALLERY_MEMBERS", fetch="all"
@@ -89,7 +89,7 @@ def upload_media(space_id):
 @login_required
 def view_media(media_id):
     user_id = session["user_id"]
-    row = db.run_query("SELECT * FROM media WHERE media_id=%s",(media_id,),fetch="one",action_label="MEDIA_VIEW_FETCH")
+    row = db.run_query("SELECT media_id, space_id, uploaded_by, file_path, cloudinary_public_id, file_type, file_size, visibility FROM media WHERE media_id=%s",(media_id,),fetch="one",action_label="MEDIA_VIEW_FETCH")
     if not row: abort(404)
 
     # Must be space member
@@ -152,7 +152,7 @@ def delete_image(image_id):
 @login_required
 def download_media(media_id):
     user_id = session["user_id"]
-    row = db.run_query("SELECT * FROM media WHERE media_id=%s", (media_id,), fetch="one", action_label="MEDIA_DL_FETCH")
+    row = db.run_query("SELECT media_id, space_id, uploaded_by, file_path, cloudinary_public_id, file_type, file_size, visibility FROM media WHERE media_id=%s", (media_id,), fetch="one", action_label="MEDIA_DL_FETCH")
     if not row: abort(404)
 
     # Must be space member

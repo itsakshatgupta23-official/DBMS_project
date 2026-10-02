@@ -12,7 +12,7 @@ expenses_bp = Blueprint("expenses", __name__, url_prefix="/spaces/<int:space_id>
 @space_member_required
 def list_expenses(space_id):
     expenses = db.run_query(
-        """SELECT e.*, u.username AS payer FROM expenses e
+        """SELECT e.expense_id, e.space_id, e.description, e.amount, e.paid_by, e.created_by, e.created_at, u.username AS payer FROM expenses e
            JOIN users u ON u.user_id=e.paid_by
            WHERE e.space_id=%s ORDER BY e.created_at DESC""",
         (space_id,), action_label="LIST_EXPENSES", fetch="all"
@@ -22,7 +22,7 @@ def list_expenses(space_id):
         (space_id,), action_label="EXPENSE_MEMBERS", fetch="all"
     )
     settlements = compute_settlements(space_id)
-    space = db.run_query("SELECT * FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="EXPENSE_SPACE")
+    space = db.run_query("SELECT space_id, name, description, space_type, invite_code FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="EXPENSE_SPACE")
     role = db.run_query("SELECT role FROM space_members WHERE space_id=%s AND user_id=%s",(space_id,session["user_id"]),fetch="one",action_label="EXPENSE_ROLE")
     return render_template("space/expenses.html", expenses=expenses, members=members,
                            settlements=settlements, space=space, role=role["role"] if role else "MEMBER")
@@ -117,7 +117,7 @@ def add_expense(space_id):
 @expenses_bp.route("/settlement/<int:settlement_id>/pay", methods=["POST"])
 @login_required
 def pay_settlement(space_id, settlement_id):
-    row = db.run_query("SELECT * FROM settlements WHERE settlement_id=%s AND from_user=%s",
+    row = db.run_query("SELECT settlement_id FROM settlements WHERE settlement_id=%s AND from_user=%s",
                        (settlement_id, session["user_id"]), fetch="one", action_label="SETTLE_CHECK")
     if not row:
         return jsonify({"error":"Settlement not found or unauthorized."}), 404

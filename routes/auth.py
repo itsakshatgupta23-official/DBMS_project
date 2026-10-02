@@ -73,7 +73,7 @@ def login():
         password   = request.form.get("password", "")
 
         user = db.run_query(
-            "SELECT * FROM users WHERE username = %s OR email = %s",
+            "SELECT user_id, username, password_hash, is_developer FROM users WHERE username = %s OR email = %s",
             (identifier, identifier),
             action_label="LOGIN_FETCH",
             fetch="one",

@@ -40,10 +40,10 @@ def list_notes(space_id):
     db.commit()
 
     notes = db.run_query(
-        "SELECT n.*, u.username AS author FROM notes n JOIN users u ON u.user_id=n.created_by WHERE n.space_id=%s ORDER BY n.updated_at DESC",
+        "SELECT n.note_id, n.space_id, n.created_by, n.title, n.content, n.source_message_id, n.created_at, n.updated_at, n.seen, u.username AS author FROM notes n JOIN users u ON u.user_id=n.created_by WHERE n.space_id=%s ORDER BY n.updated_at DESC",
         (space_id,), action_label="LIST_NOTES", fetch="all"
     )
-    space = db.run_query("SELECT * FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="NOTE_SPACE")
+    space = db.run_query("SELECT space_id, name, description, space_type, invite_code FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="NOTE_SPACE")
     role = db.run_query("SELECT role FROM space_members WHERE space_id=%s AND user_id=%s",(space_id,session["user_id"]),fetch="one",action_label="NOTE_ROLE")
     return render_template("space/notes.html", notes=notes, space=space,
                            role=role["role"] if role else "MEMBER")
@@ -72,7 +72,7 @@ def get_note(space_id, note_id):
     db.run_query("UPDATE notes SET seen = TRUE WHERE note_id=%s", (note_id,), fetch="none", action_label="MARK_SINGLE_NOTE_SEEN")
     db.commit()
 
-    note = db.run_query("SELECT * FROM notes WHERE note_id=%s AND space_id=%s",(note_id,space_id),fetch="one",action_label="GET_NOTE")
+    note = db.run_query("SELECT note_id, title, content FROM notes WHERE note_id=%s AND space_id=%s",(note_id,space_id),fetch="one",action_label="GET_NOTE")
     if not note: return jsonify({"error":"Not found"}), 404
     return jsonify({"note": {"title":note["title"],"content":note["content"],"note_id":note["note_id"]}})
 

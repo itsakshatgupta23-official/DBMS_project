@@ -119,7 +119,7 @@ def group_chat(space_id):
     )
     db.commit()
 
-    space = db.run_query("SELECT * FROM spaces WHERE space_id=%s", (space_id,), fetch="one", action_label="CHAT_SPACE")
+    space = db.run_query("SELECT space_id, name, description, space_type, invite_code FROM spaces WHERE space_id=%s", (space_id,), fetch="one", action_label="CHAT_SPACE")
     messages = db.run_query(
         """SELECT cm.message_id, cm.message, cm.created_at, cm.file_url, cm.file_type, cm.original_filename, cm.is_pinned,
                   u.username AS sender,
@@ -218,7 +218,7 @@ def poll_group(space_id):
 def _get_or_create_conversation(space_id, user_a, user_b):
     lo, hi = min(user_a,user_b), max(user_a,user_b)
     row = db.run_query(
-        "SELECT * FROM private_conversations WHERE space_id=%s AND user_low=%s AND user_high=%s",
+        "SELECT conversation_id, space_id, user_low, user_high FROM private_conversations WHERE space_id=%s AND user_low=%s AND user_high=%s",
         (space_id,lo,hi), fetch="one", action_label="GET_CONV"
     )
     if row: return row
@@ -228,7 +228,7 @@ def _get_or_create_conversation(space_id, user_a, user_b):
     )
     db.commit()
     return db.run_query(
-        "SELECT * FROM private_conversations WHERE space_id=%s AND user_low=%s AND user_high=%s",
+        "SELECT conversation_id, space_id, user_low, user_high FROM private_conversations WHERE space_id=%s AND user_low=%s AND user_high=%s",
         (space_id,lo,hi), fetch="one", action_label="GET_NEW_CONV"
     )
 
@@ -238,7 +238,7 @@ def _get_or_create_conversation(space_id, user_a, user_b):
 def private_chat(space_id, other_user_id):
     conv = _get_or_create_conversation(space_id, session["user_id"], other_user_id)
     conv_id = conv["conversation_id"]
-    space   = db.run_query("SELECT * FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="PRIV_CHAT_SPACE")
+    space   = db.run_query("SELECT space_id, name, description, space_type, invite_code FROM spaces WHERE space_id=%s",(space_id,),fetch="one",action_label="PRIV_CHAT_SPACE")
     other   = db.run_query("SELECT username FROM users WHERE user_id=%s",(other_user_id,),fetch="one",action_label="PRIV_OTHER_USER")
     messages = db.run_query(
         """SELECT pm.message_id, pm.message, pm.created_at, u.username AS sender,

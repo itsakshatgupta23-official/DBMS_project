@@ -107,7 +107,7 @@ def join_space():
         if not code:
             return jsonify({"success": False, "error": "Invite code is required."}), 400
 
-        space = db.run_query("SELECT * FROM spaces WHERE invite_code=%s", (code,), fetch="one", action_label="JOIN_FIND_SPACE")
+        space = db.run_query("SELECT space_id, host_id, name FROM spaces WHERE invite_code=%s", (code,), fetch="one", action_label="JOIN_FIND_SPACE")
         if not space:
             return jsonify({"success": False, "error": "Invalid invite code."}), 404
 
@@ -141,7 +141,7 @@ def join_space():
 @login_required
 @space_member_required
 def space_home(space_id):
-    space = db.run_query("SELECT * FROM spaces WHERE space_id=%s",(space_id,), fetch="one", action_label="SPACE_HOME_FETCH")
+    space = db.run_query("SELECT space_id, name, description, space_type, invite_code, host_id, created_at FROM spaces WHERE space_id=%s",(space_id,), fetch="one", action_label="SPACE_HOME_FETCH")
     if not space: abort(404)
     role = db.run_query("SELECT role FROM space_members WHERE space_id=%s AND user_id=%s",(space_id, session["user_id"]), fetch="one", action_label="SPACE_ROLE_FETCH")
     members = db.run_query(
@@ -165,7 +165,7 @@ def decide_request(request_id):
         return jsonify({"success": False, "error": "Invalid decision status. Must be APPROVED or REJECTED."}), 400
 
     req = db.run_query(
-        "SELECT * FROM join_requests WHERE request_id = %s",
+        "SELECT request_id, space_id, user_id, status FROM join_requests WHERE request_id = %s",
         (request_id,),
         fetch="one",
         action_label="FETCH_JOIN_REQ_DECIDE"
@@ -223,47 +223,45 @@ def get_space_badge_counts(space_id):
     """Return JSON counts of pending requests and unread items for space sidebar."""
     user_id = session["user_id"]
 
-    # 1. Count pending join requests (only if current user is HOST)
+    # Check if host and fetch all badge counts in a consolidated query
     is_host = db.run_query(
         "SELECT 1 FROM space_members WHERE space_id = %s AND user_id = %s AND role = 'HOST'",
         (space_id, user_id),
         fetch="one",
         action_label="CHECK_HOST_BADGES"
     )
-    pending_requests_count = 0
+
     if is_host:
-        cnt = db.run_query(
-            "SELECT COUNT(*) AS count FROM join_requests WHERE space_id = %s AND status = 'PENDING'",
-            (space_id,),
+        counts = db.run_query(
+            """
+            SELECT 
+                (SELECT COUNT(*) FROM join_requests WHERE space_id = %s AND status = 'PENDING') AS pending_requests,
+                (SELECT COUNT(*) FROM chat_messages WHERE space_id = %s AND sender_id != %s AND is_read = FALSE) AS unread_chats,
+                (SELECT COUNT(*) FROM media WHERE space_id = %s AND uploaded_by != %s AND seen = FALSE) AS unseen_images,
+                (SELECT COUNT(*) FROM notes WHERE space_id = %s AND created_by != %s AND seen = FALSE) AS unseen_notes
+            """,
+            (space_id, space_id, user_id, space_id, user_id, space_id, user_id),
             fetch="one",
-            action_label="COUNT_PENDING_REQS"
+            action_label="CONSOLIDATED_SPACE_BADGES"
         )
-        pending_requests_count = cnt["count"] if cnt else 0
+    else:
+        counts = db.run_query(
+            """
+            SELECT 
+                0 AS pending_requests,
+                (SELECT COUNT(*) FROM chat_messages WHERE space_id = %s AND sender_id != %s AND is_read = FALSE) AS unread_chats,
+                (SELECT COUNT(*) FROM media WHERE space_id = %s AND uploaded_by != %s AND seen = FALSE) AS unseen_images,
+                (SELECT COUNT(*) FROM notes WHERE space_id = %s AND created_by != %s AND seen = FALSE) AS unseen_notes
+            """,
+            (space_id, user_id, space_id, user_id, space_id, user_id),
+            fetch="one",
+            action_label="CONSOLIDATED_SPACE_BADGES"
+        )
 
-    # 2. Count unread chats, unseen images, and unseen notes for current user
-    cnt_chats = db.run_query(
-        "SELECT COUNT(*) AS count FROM chat_messages WHERE space_id = %s AND sender_id != %s AND is_read = FALSE",
-        (space_id, user_id),
-        fetch="one",
-        action_label="COUNT_UNREAD_CHATS"
-    )
-    unread_chats_count = cnt_chats["count"] if cnt_chats else 0
-
-    cnt_images = db.run_query(
-        "SELECT COUNT(*) AS count FROM media WHERE space_id = %s AND uploaded_by != %s AND seen = FALSE",
-        (space_id, user_id),
-        fetch="one",
-        action_label="COUNT_UNSEEN_IMAGES"
-    )
-    unseen_images_count = cnt_images["count"] if cnt_images else 0
-
-    cnt_notes = db.run_query(
-        "SELECT COUNT(*) AS count FROM notes WHERE space_id = %s AND created_by != %s AND seen = FALSE",
-        (space_id, user_id),
-        fetch="one",
-        action_label="COUNT_UNSEEN_NOTES"
-    )
-    unseen_notes_count = cnt_notes["count"] if cnt_notes else 0
+    pending_requests_count = counts["pending_requests"] if counts else 0
+    unread_chats_count = counts["unread_chats"] if counts else 0
+    unseen_images_count = counts["unseen_images"] if counts else 0
+    unseen_notes_count = counts["unseen_notes"] if counts else 0
 
     return jsonify({
         "pending_requests": pending_requests_count,

@@ -1,6 +1,6 @@
 """
-db.py – Centralized Query & Connection Manager with Request Teardown.
-Uses request-scoped g.db connection with teardown to avoid Error 1203.
+db.py – Centralized Query & Connection Manager with Connection Pooling.
+Uses MySQLConnectionPool (pool_size=5) to avoid per-request connection overhead.
 Connects to Aiven for MySQL over SSL (port 26320).
 """
 
@@ -10,12 +10,16 @@ import json
 import threading
 
 import mysql.connector
+import mysql.connector.pooling
 from flask import g, session, request, has_request_context
 
 from config import Config
 
 _local = threading.local()
 
+# ──────────────────────────────────────────────────────────────
+# Connection Pool – created once at module import time
+# ──────────────────────────────────────────────────────────────
 
 def _get_connection_params():
     return dict(
@@ -30,43 +34,83 @@ def _get_connection_params():
     )
 
 
+def _create_pool():
+    """Create a new MySQLConnectionPool.  Returns pool or None on failure."""
+    try:
+        params = _get_connection_params()
+        return mysql.connector.pooling.MySQLConnectionPool(
+            pool_name="chronicle",
+            pool_size=5,
+            pool_reset_session=True,
+            **params,
+        )
+    except Exception as exc:
+        print(f"[db] Warning: could not create connection pool: {exc}")
+        return None
+
+
+_pool = _create_pool()
+_pool_lock = threading.Lock()
+
+
+def _get_pooled_connection():
+    """Return a connection from the pool, rebuilding pool if needed."""
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                _pool = _create_pool()
+    if _pool is not None:
+        try:
+            return _pool.get_connection()
+        except mysql.connector.errors.PoolExhausted:
+            pass  # Fall through to direct connect
+        except Exception:
+            pass
+    # Fallback: direct connection when pool unavailable / exhausted
+    return mysql.connector.connect(**_get_connection_params())
+
+
+# ──────────────────────────────────────────────────────────────
+# Request-scoped connection management
+# ──────────────────────────────────────────────────────────────
+
 def get_db():
     """
     Get or create the MySQL connection for the current Flask request.
-    Reuses g.db across the request lifecycle.
+    Reuses g.db across the request lifecycle; returns from pool on first call.
     """
     if has_request_context():
         if "db" not in g or g.db is None or not g.db.is_connected():
-            g.db = mysql.connector.connect(**_get_connection_params())
+            g.db = _get_pooled_connection()
         return g.db
 
     # Outside request context (CLI scripts, background tasks)
     conn = getattr(_local, "conn", None)
     if conn is None or not conn.is_connected():
-        conn = mysql.connector.connect(**_get_connection_params())
+        conn = _get_pooled_connection()
         _local.conn = conn
     return conn
 
 
 def close_db(e=None):
     """
-    Close the database connection on request teardown.
+    Return the database connection to the pool on request teardown.
     Registered via app.teardown_appcontext(close_db).
+    Calling .close() on a pooled connection returns it to the pool.
     """
     if has_request_context():
         db_conn = g.pop("db", None)
         if db_conn is not None:
             try:
-                if db_conn.is_connected():
-                    db_conn.close()
+                db_conn.close()  # Returns to pool (does not physically close)
             except Exception:
                 pass
     else:
         conn = getattr(_local, "conn", None)
         if conn is not None:
             try:
-                if conn.is_connected():
-                    conn.close()
+                conn.close()
             except Exception:
                 pass
             _local.conn = None
@@ -137,10 +181,12 @@ def init_db():
 
     conn = get_db()
     cursor = conn.cursor()
-    for stmt in statements:
-        cursor.execute(stmt)
-    conn.commit()
-    cursor.close()
+    try:
+        for stmt in statements:
+            cursor.execute(stmt)
+        conn.commit()
+    finally:
+        cursor.close()
 
 
 # ──────────────────────────────────────────────────────────────
@@ -165,27 +211,29 @@ def _write_log(user_id, action_label, query_type, sql_text,
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO query_log
-                (user_id, action_label, query_type, sql_text, params_json,
-                 status, error_message, rows_affected, duration_ms, route)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            """,
-            (
-                user_id,
-                action_label,
-                query_type,
-                sql_text[:4000],
-                _mask_params(params),
-                status,
-                error_message[:2000] if error_message else None,
-                rows_affected,
-                duration_ms,
-                route,
-            ),
-        )
-        cur.close()
+        try:
+            cur.execute(
+                """
+                INSERT INTO query_log
+                    (user_id, action_label, query_type, sql_text, params_json,
+                     status, error_message, rows_affected, duration_ms, route)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    user_id,
+                    action_label,
+                    query_type,
+                    sql_text[:4000],
+                    _mask_params(params),
+                    status,
+                    error_message[:2000] if error_message else None,
+                    rows_affected,
+                    duration_ms,
+                    route,
+                ),
+            )
+        finally:
+            cur.close()
     except Exception:
         pass  # Never let logging crash the main application
 

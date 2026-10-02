@@ -32,7 +32,7 @@ def decide_request(space_id, req_id):
     else:
         return jsonify({"success": False, "error": "Invalid action. Must be approve or reject."}), 400
 
-    req = db.run_query("SELECT * FROM join_requests WHERE request_id=%s AND space_id=%s",(req_id, space_id), fetch="one", action_label="FETCH_REQ")
+    req = db.run_query("SELECT request_id, user_id FROM join_requests WHERE request_id=%s AND space_id=%s",(req_id, space_id), fetch="one", action_label="FETCH_REQ")
     if not req:
         return jsonify({"success": False, "error": "Request not found"}), 404
 
