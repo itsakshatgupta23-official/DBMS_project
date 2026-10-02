@@ -2,20 +2,31 @@
 app.py – Chronicle Flask Application Factory
 """
 
+import os
 from datetime import timedelta
+from dotenv import load_dotenv
 from flask import Flask, render_template, session, redirect, url_for, request, jsonify
 
 from config import Config
 import db
 
+load_dotenv()
+
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = Config.SECRET_KEY
+    app.secret_key = os.getenv("SECRET_KEY", getattr(Config, "SECRET_KEY", "chronicle-dev-secret-2024"))
     app.config['SESSION_PERMANENT'] = False
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+    # ── Database configuration from environment with default fallbacks ──
+    app.config["DB_HOST"] = os.getenv("DB_HOST", getattr(Config, "DB_HOST", "mysql-1c6fb4b1-dbmsproject23.d.aivencloud.com"))
+    app.config["DB_PORT"] = int(os.getenv("DB_PORT", str(getattr(Config, "DB_PORT", 26320))))
+    app.config["DB_USER"] = os.getenv("DB_USER", getattr(Config, "DB_USER", "avnadmin"))
+    app.config["DB_PASSWORD"] = os.getenv("DB_PASSWORD", getattr(Config, "DB_PASSWORD", "AVNS_poFFSVcMGs7kJFTf8gV"))
+    app.config["DB_NAME"] = os.getenv("DB_NAME", getattr(Config, "DB_NAME", "defaultdb"))
 
     # ── Response Compression ──────────────────────────────────
     try:

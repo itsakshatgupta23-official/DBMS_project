@@ -1,5 +1,6 @@
 flask==3.0.3
 mysql-connector-python==8.4.0
+PyMySQL==1.1.1
 cloudinary==1.40.0
 python-dotenv==1.0.1
 werkzeug==3.0.3

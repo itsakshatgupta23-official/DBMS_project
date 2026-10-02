@@ -18,57 +18,78 @@ from config import Config
 _local = threading.local()
 
 # ──────────────────────────────────────────────────────────────
-# Connection Pool – created once at module import time
+# Safe Connection Pool & Direct Fallback
 # ──────────────────────────────────────────────────────────────
 
 def _get_connection_params():
     return dict(
-        host=os.getenv("DB_HOST", Config.DB_HOST),
-        port=int(os.getenv("DB_PORT", Config.DB_PORT)),
-        user=os.getenv("DB_USER", Config.DB_USER),
-        password=os.getenv("DB_PASSWORD", Config.DB_PASSWORD),
-        database=os.getenv("DB_NAME", Config.DB_NAME),
-        connection_timeout=15,
+        host=os.getenv("DB_HOST", getattr(Config, "DB_HOST", "mysql-1c6fb4b1-dbmsproject23.d.aivencloud.com")),
+        port=int(os.getenv("DB_PORT", str(getattr(Config, "DB_PORT", 26320)))),
+        user=os.getenv("DB_USER", getattr(Config, "DB_USER", "avnadmin")),
+        password=os.getenv("DB_PASSWORD", getattr(Config, "DB_PASSWORD", "AVNS_poFFSVcMGs7kJFTf8gV")),
+        database=os.getenv("DB_NAME", getattr(Config, "DB_NAME", "defaultdb")),
+        connection_timeout=10,
         autocommit=True,
         ssl_disabled=False,  # Aiven requires SSL
     )
 
 
+def direct_connect():
+    """
+    Direct fallback connection to MySQL via mysql.connector.connect().
+    Invoked whenever pool creation fails, hits limits, or is exhausted.
+    """
+    params = _get_connection_params()
+    return mysql.connector.connect(**params)
+
+
+_pool = None
+_pool_lock = threading.Lock()
+_pool_failed = False
+
+
 def _create_pool():
-    """Create a new MySQLConnectionPool.  Returns pool or None on failure."""
+    """Create a new MySQLConnectionPool wrapped in try...except block."""
     try:
         params = _get_connection_params()
-        return mysql.connector.pooling.MySQLConnectionPool(
-            pool_name="chronicle",
+        pool = mysql.connector.pooling.MySQLConnectionPool(
+            pool_name="chronicle_pool",
             pool_size=5,
             pool_reset_session=True,
             **params,
         )
+        return pool
     except Exception as exc:
-        print(f"[db] Warning: could not create connection pool: {exc}")
+        print(f"[db] Warning: MySQLConnectionPool creation failed: {exc}. Using direct connection fallback.")
         return None
 
 
-_pool = _create_pool()
-_pool_lock = threading.Lock()
-
-
 def _get_pooled_connection():
-    """Return a connection from the pool, rebuilding pool if needed."""
-    global _pool
-    if _pool is None:
-        with _pool_lock:
-            if _pool is None:
-                _pool = _create_pool()
-    if _pool is not None:
-        try:
-            return _pool.get_connection()
-        except mysql.connector.errors.PoolExhausted:
-            pass  # Fall through to direct connect
-        except Exception:
-            pass
-    # Fallback: direct connection when pool unavailable / exhausted
-    return mysql.connector.connect(**_get_connection_params())
+    """
+    Return a connection from the pool, or fallback gracefully to direct_connect()
+    if pool initialization fails or hits a connection limit.
+    """
+    global _pool, _pool_failed
+    if not _pool_failed:
+        if _pool is None:
+            with _pool_lock:
+                if _pool is None and not _pool_failed:
+                    _pool = _create_pool()
+                    if _pool is None:
+                        _pool_failed = True
+
+        if _pool is not None:
+            try:
+                conn = _pool.get_connection()
+                if conn and conn.is_connected():
+                    return conn
+            except mysql.connector.errors.PoolExhausted as pe:
+                print(f"[db] Pool exhausted ({pe}). Falling back to direct connection.")
+            except Exception as exc:
+                print(f"[db] Warning: Failed to get pooled connection ({exc}). Falling back to direct connection.")
+
+    # Graceful fallback: direct standalone connection
+    return direct_connect()
 
 
 # ──────────────────────────────────────────────────────────────
