@@ -361,6 +361,11 @@ function appendChatMessage(msg) {
       <button type="button" class="btn-pin-note" onclick="pinToNotes(${msg.message_id}, this)" title="Pin to Notes">
         📌 Pin to Notes
       </button>
+      ${isMine ? `
+      <button type="button" class="btn-delete-item" onclick="deleteChatMessage(${msg.message_id})" title="Delete message">
+        🗑️
+      </button>
+      ` : ''}
     </div>
   `;
   container.appendChild(div);
@@ -616,6 +621,16 @@ async function updateSidebarBadges(spaceId) {
         reqBadge.style.display = 'none';
       }
     }
+
+    // Update Unread Notification Dots
+    const chatDot = document.getElementById('chat-unread-dot');
+    if (chatDot) chatDot.style.display = data.has_unread_chats ? 'inline-block' : 'none';
+
+    const imgDot = document.getElementById('gallery-unseen-dot');
+    if (imgDot) imgDot.style.display = data.has_unseen_images ? 'inline-block' : 'none';
+
+    const noteDot = document.getElementById('notes-unseen-dot');
+    if (noteDot) noteDot.style.display = data.has_unseen_notes ? 'inline-block' : 'none';
   } catch (err) {
     console.error('Error fetching sidebar badges:', err);
   }
@@ -631,3 +646,80 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => updateSidebarBadges(spaceId), 8000); // Poll every 8s – Aiven supports high concurrency
   }
 });
+
+
+// ═══════════════════════════════════════
+// DELETE FUNCTIONS (Chats, Images, Notes)
+// ═══════════════════════════════════════
+
+async function deleteChatMessage(messageId) {
+  if (!confirm('Are you sure you want to delete this message?')) return;
+  try {
+    const res = await fetch(`/delete-chat/${messageId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Message deleted', 'success');
+      const el = document.querySelector(`[data-msg-id="${messageId}"]`);
+      if (el) el.remove();
+    } else {
+      showToast(data.error || 'Failed to delete message', 'danger');
+    }
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'danger');
+  }
+}
+window.deleteChatMessage = deleteChatMessage;
+
+async function deleteImage(imageId) {
+  if (!confirm('Are you sure you want to delete this image?')) return;
+  try {
+    const res = await fetch(`/delete-image/${imageId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Image deleted', 'success');
+      const el = document.getElementById(`media-item-${imageId}`) || document.querySelector(`[data-media-id="${imageId}"]`);
+      if (el) {
+        el.remove();
+      } else {
+        window.location.reload();
+      }
+    } else {
+      showToast(data.error || 'Failed to delete image', 'danger');
+    }
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'danger');
+  }
+}
+window.deleteImage = deleteImage;
+
+async function deleteNoteItem(noteId) {
+  if (!confirm('Are you sure you want to delete this note?')) return;
+  try {
+    const res = await fetch(`/delete-note/${noteId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Note deleted', 'success');
+      const el = document.getElementById(`note-item-${noteId}`) || document.querySelector(`[data-note-id="${noteId}"]`);
+      if (el) {
+        el.remove();
+      } else {
+        window.location.reload();
+      }
+    } else {
+      showToast(data.error || 'Failed to delete note', 'danger');
+    }
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'danger');
+  }
+}
+window.deleteNoteItem = deleteNoteItem;
+

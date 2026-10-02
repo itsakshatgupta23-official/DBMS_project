@@ -14,7 +14,7 @@
   <div class="gallery-grid">
     {% for m in media %}
       {% if m.can_view %}
-        <div class="gallery-item" onclick="viewMedia({{ m.media_id }})">
+        <div class="gallery-item" id="media-item-{{ m.media_id }}" onclick="viewMedia({{ m.media_id }})">
           {% if m.file_type in ['jpg','jpeg','png','gif','webp'] %}
             <img src="{{ m.file_path }}" alt="{{ m.media_id }}" loading="lazy" />
           {% else %}
@@ -32,6 +32,11 @@
                  class="btn-download" title="Download">
                  📥 Download
               </a>
+              {% if m.uploaded_by == session.user_id or role == 'HOST' %}
+                <button type="button" class="btn-delete-item" onclick="deleteImage({{ m.media_id }})" title="Delete image" style="background:rgba(211,47,47,0.85);color:#fff;padding:0.28rem 0.5rem;border-radius:var(--radius-sm);font-size:0.74rem;font-weight:700;margin-left:0.35rem;">
+                  🗑️
+                </button>
+              {% endif %}
             </div>
           </div>
         </div>

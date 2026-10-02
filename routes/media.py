@@ -12,6 +12,14 @@ media_bp = Blueprint("media", __name__)
 @space_member_required
 def gallery(space_id):
     user_id = session["user_id"]
+
+    # Mark unseen media as seen for this user in this space
+    db.run_query(
+        "UPDATE media SET seen = TRUE WHERE space_id = %s AND uploaded_by != %s AND seen = FALSE",
+        (space_id, user_id), fetch="none", action_label="MARK_MEDIA_SEEN"
+    )
+    db.commit()
+
     media = db.run_query(
         """
         SELECT m.*, u.username AS uploader_name,
@@ -95,6 +103,10 @@ def view_media(media_id):
                               (media_id, user_id), fetch="one", action_label="MEDIA_VIEW_ACCESS_CHECK")
         if not access and row["uploaded_by"] != user_id: abort(403)
 
+    # Mark this media as seen
+    db.run_query("UPDATE media SET seen = TRUE WHERE media_id = %s", (media_id,), fetch="none", action_label="MARK_SINGLE_MEDIA_SEEN")
+    db.commit()
+
     # Proxy the Cloudinary URL to client
     try:
         cloud_resp = http_req.get(row["file_path"], timeout=10)
@@ -105,6 +117,36 @@ def view_media(media_id):
         )
     except Exception:
         abort(502)
+
+
+@media_bp.route("/delete-image/<int:image_id>", methods=["POST", "DELETE"])
+@login_required
+def delete_image(image_id):
+    user_id = session["user_id"]
+    row = db.run_query(
+        "SELECT media_id, space_id, uploaded_by, cloudinary_public_id FROM media WHERE media_id = %s",
+        (image_id,), fetch="one", action_label="FETCH_MEDIA_FOR_DELETE"
+    )
+    if not row:
+        return jsonify({"success": False, "error": "Image not found."}), 404
+
+    is_host = db.run_query(
+        "SELECT 1 FROM space_members WHERE space_id = %s AND user_id = %s AND role = 'HOST'",
+        (row["space_id"], user_id), fetch="one", action_label="CHECK_HOST_DELETE_MEDIA"
+    )
+    if row["uploaded_by"] != user_id and not is_host:
+        return jsonify({"success": False, "error": "Unauthorized to delete this image."}), 403
+
+    if row.get("cloudinary_public_id"):
+        try:
+            delete_file(row["cloudinary_public_id"])
+        except Exception:
+            pass
+
+    db.run_query("DELETE FROM media WHERE media_id = %s", (image_id,), fetch="none", action_label="DELETE_MEDIA_ROW")
+    db.commit()
+    return jsonify({"success": True, "message": "Image deleted successfully."})
+
 
 @media_bp.route("/media/<int:media_id>/download")
 @login_required

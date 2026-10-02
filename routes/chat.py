@@ -62,12 +62,63 @@ def pin_to_notes_space(space_id, message_id):
     return _do_pin_to_notes(message_id)
 
 
+@messages_bp.route("/delete-chat/<int:chat_id>", methods=["POST", "DELETE"])
+@login_required
+def delete_chat(chat_id):
+    user_id = session["user_id"]
+
+    # 1. Check in chat_messages (group chat)
+    msg = db.run_query(
+        "SELECT message_id, space_id, sender_id FROM chat_messages WHERE message_id = %s",
+        (chat_id,), fetch="one", action_label="FETCH_CHAT_FOR_DELETE"
+    )
+    if msg:
+        is_host = db.run_query(
+            "SELECT 1 FROM space_members WHERE space_id = %s AND user_id = %s AND role = 'HOST'",
+            (msg["space_id"], user_id), fetch="one", action_label="CHECK_HOST_DELETE_CHAT"
+        )
+        if msg["sender_id"] != user_id and not is_host:
+            return jsonify({"success": False, "error": "Unauthorized to delete this message."}), 403
+
+        db.run_query(
+            "DELETE FROM chat_messages WHERE message_id = %s",
+            (chat_id,), fetch="none", action_label="DELETE_CHAT_MSG"
+        )
+        db.commit()
+        return jsonify({"success": True, "message": "Message deleted successfully."})
+
+    # 2. Check in private_messages
+    pmsg = db.run_query(
+        "SELECT message_id, sender_id FROM private_messages WHERE message_id = %s",
+        (chat_id,), fetch="one", action_label="FETCH_PRIV_FOR_DELETE"
+    )
+    if pmsg:
+        if pmsg["sender_id"] != user_id:
+            return jsonify({"success": False, "error": "Unauthorized to delete this message."}), 403
+
+        db.run_query(
+            "DELETE FROM private_messages WHERE message_id = %s",
+            (chat_id,), fetch="none", action_label="DELETE_PRIV_MSG"
+        )
+        db.commit()
+        return jsonify({"success": True, "message": "Message deleted successfully."})
+
+    return jsonify({"success": False, "error": "Message not found."}), 404
+
+
 # ── Group Chat ──────────────────────────────────────────────
 
 @chat_bp.route("/chat")
 @login_required
 @space_member_required
 def group_chat(space_id):
+    # Mark unread chat messages as read for this user
+    db.run_query(
+        "UPDATE chat_messages SET is_read = TRUE WHERE space_id = %s AND sender_id != %s AND is_read = FALSE",
+        (space_id, session["user_id"]), fetch="none", action_label="MARK_CHAT_READ"
+    )
+    db.commit()
+
     space = db.run_query("SELECT * FROM spaces WHERE space_id=%s", (space_id,), fetch="one", action_label="CHAT_SPACE")
     messages = db.run_query(
         """SELECT cm.message_id, cm.message, cm.created_at, cm.file_url, cm.file_type, cm.original_filename, cm.is_pinned,

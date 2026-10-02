@@ -4,11 +4,41 @@ import db
 from utils.decorators import login_required, space_member_required
 
 notes_bp = Blueprint("notes", __name__, url_prefix="/spaces/<int:space_id>/notes")
+notes_action_bp = Blueprint("notes_action", __name__)
+
+@notes_action_bp.route("/delete-note/<int:note_id>", methods=["POST", "DELETE"])
+@login_required
+def delete_note_global(note_id):
+    user_id = session["user_id"]
+    note = db.run_query(
+        "SELECT note_id, space_id, created_by FROM notes WHERE note_id = %s",
+        (note_id,), fetch="one", action_label="FETCH_NOTE_FOR_DELETE"
+    )
+    if not note:
+        return jsonify({"success": False, "error": "Note not found."}), 404
+
+    is_host = db.run_query(
+        "SELECT 1 FROM space_members WHERE space_id = %s AND user_id = %s AND role = 'HOST'",
+        (note["space_id"], user_id), fetch="one", action_label="CHECK_HOST_DELETE_NOTE"
+    )
+    if note["created_by"] != user_id and not is_host:
+        return jsonify({"success": False, "error": "Unauthorized to delete this note."}), 403
+
+    db.run_query("DELETE FROM notes WHERE note_id = %s", (note_id,), fetch="none", action_label="DELETE_NOTE_ROW")
+    db.commit()
+    return jsonify({"success": True, "message": "Note deleted successfully."})
 
 @notes_bp.route("/")
 @login_required
 @space_member_required
 def list_notes(space_id):
+    # Mark unseen notes as seen for this user
+    db.run_query(
+        "UPDATE notes SET seen = TRUE WHERE space_id = %s AND created_by != %s AND seen = FALSE",
+        (space_id, session["user_id"]), fetch="none", action_label="MARK_NOTES_SEEN"
+    )
+    db.commit()
+
     notes = db.run_query(
         "SELECT n.*, u.username AS author FROM notes n JOIN users u ON u.user_id=n.created_by WHERE n.space_id=%s ORDER BY n.updated_at DESC",
         (space_id,), action_label="LIST_NOTES", fetch="all"
@@ -38,6 +68,10 @@ def add_note(space_id):
 @login_required
 @space_member_required
 def get_note(space_id, note_id):
+    # Mark this note as seen
+    db.run_query("UPDATE notes SET seen = TRUE WHERE note_id=%s", (note_id,), fetch="none", action_label="MARK_SINGLE_NOTE_SEEN")
+    db.commit()
+
     note = db.run_query("SELECT * FROM notes WHERE note_id=%s AND space_id=%s",(note_id,space_id),fetch="one",action_label="GET_NOTE")
     if not note: return jsonify({"error":"Not found"}), 404
     return jsonify({"note": {"title":note["title"],"content":note["content"],"note_id":note["note_id"]}})
@@ -56,13 +90,25 @@ def update_note(space_id, note_id):
     db.commit()
     return jsonify({"message":"Note updated."})
 
-@notes_bp.route("/<int:note_id>/delete", methods=["POST"])
+@notes_bp.route("/<int:note_id>/delete", methods=["POST", "DELETE"])
 @login_required
 @space_member_required
 def delete_note(space_id, note_id):
-    db.run_query(
-        "DELETE FROM notes WHERE note_id=%s AND (created_by=%s OR EXISTS(SELECT 1 FROM space_members WHERE space_id=%s AND user_id=%s AND role='HOST'))",
-        (note_id, session["user_id"], space_id, session["user_id"]), action_label="DELETE_NOTE", fetch="none"
+    user_id = session["user_id"]
+    note = db.run_query(
+        "SELECT note_id, space_id, created_by FROM notes WHERE note_id = %s",
+        (note_id,), fetch="one", action_label="FETCH_NOTE_FOR_DELETE"
     )
+    if not note:
+        return jsonify({"success": False, "error": "Note not found."}), 404
+
+    is_host = db.run_query(
+        "SELECT 1 FROM space_members WHERE space_id = %s AND user_id = %s AND role = 'HOST'",
+        (space_id, user_id), fetch="one", action_label="CHECK_HOST_DELETE_NOTE"
+    )
+    if note["created_by"] != user_id and not is_host:
+        return jsonify({"success": False, "error": "Unauthorized to delete this note."}), 403
+
+    db.run_query("DELETE FROM notes WHERE note_id = %s", (note_id,), fetch="none", action_label="DELETE_NOTE_ROW")
     db.commit()
-    return jsonify({"message":"Note deleted.", "reload": True})
+    return jsonify({"success": True, "message": "Note deleted successfully.", "reload": True})

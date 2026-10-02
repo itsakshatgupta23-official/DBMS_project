@@ -240,8 +240,38 @@ def get_space_badge_counts(space_id):
         )
         pending_requests_count = cnt["count"] if cnt else 0
 
+    # 2. Count unread chats, unseen images, and unseen notes for current user
+    cnt_chats = db.run_query(
+        "SELECT COUNT(*) AS count FROM chat_messages WHERE space_id = %s AND sender_id != %s AND is_read = FALSE",
+        (space_id, user_id),
+        fetch="one",
+        action_label="COUNT_UNREAD_CHATS"
+    )
+    unread_chats_count = cnt_chats["count"] if cnt_chats else 0
+
+    cnt_images = db.run_query(
+        "SELECT COUNT(*) AS count FROM media WHERE space_id = %s AND uploaded_by != %s AND seen = FALSE",
+        (space_id, user_id),
+        fetch="one",
+        action_label="COUNT_UNSEEN_IMAGES"
+    )
+    unseen_images_count = cnt_images["count"] if cnt_images else 0
+
+    cnt_notes = db.run_query(
+        "SELECT COUNT(*) AS count FROM notes WHERE space_id = %s AND created_by != %s AND seen = FALSE",
+        (space_id, user_id),
+        fetch="one",
+        action_label="COUNT_UNSEEN_NOTES"
+    )
+    unseen_notes_count = cnt_notes["count"] if cnt_notes else 0
+
     return jsonify({
         "pending_requests": pending_requests_count,
-        "unread_chats": 0
+        "unread_chats": unread_chats_count,
+        "unseen_images": unseen_images_count,
+        "unseen_notes": unseen_notes_count,
+        "has_unread_chats": unread_chats_count > 0,
+        "has_unseen_images": unseen_images_count > 0,
+        "has_unseen_notes": unseen_notes_count > 0,
     })
 

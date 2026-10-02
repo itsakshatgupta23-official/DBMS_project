@@ -1643,3 +1643,39 @@ code {
     overflow-x: auto !important;
   }
 }
+
+/* ═══════════════════════════════════════
+   UNREAD NOTIFICATION DOT & DELETE BUTTONS
+═══════════════════════════════════════ */
+.notification-dot {
+  height: 8px;
+  width: 8px;
+  background-color: #ff4d4d;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: middle;
+  box-shadow: 0 0 6px rgba(255, 77, 77, 0.6);
+}
+
+.btn-delete-item {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  opacity: 0.75;
+  transition: opacity 0.2s, background-color 0.2s, transform 0.2s;
+  color: var(--danger-red);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-delete-item:hover {
+  opacity: 1;
+  background-color: rgba(211, 47, 47, 0.15);
+  transform: scale(1.1);
+}
+

@@ -13,12 +13,19 @@
 {% if notes %}
   <div class="notes-grid">
     {% for note in notes %}
-      <div class="note-card" onclick="editNote({{ space.space_id }}, {{ note.note_id }})">
+      <div class="note-card" id="note-item-{{ note.note_id }}" onclick="editNote({{ space.space_id }}, {{ note.note_id }})">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
           <h4>{{ note.title }}</h4>
-          {% if note.source_message_id %}
-            <span class="badge" style="background:rgba(252,108,38,0.2);color:var(--accent);border:1px solid rgba(252,108,38,0.35);font-size:0.7rem;padding:0.2rem 0.4rem;border-radius:4px;white-space:nowrap;">📌 Chat</span>
-          {% endif %}
+          <div style="display:flex;align-items:center;gap:0.35rem;" onclick="event.stopPropagation()">
+            {% if note.source_message_id %}
+              <span class="badge" style="background:rgba(252,108,38,0.2);color:var(--accent);border:1px solid rgba(252,108,38,0.35);font-size:0.7rem;padding:0.2rem 0.4rem;border-radius:4px;white-space:nowrap;">📌 Chat</span>
+            {% endif %}
+            {% if note.created_by == session.user_id or role == 'HOST' %}
+              <button type="button" class="btn-delete-item" onclick="deleteNoteItem({{ note.note_id }})" title="Delete note">
+                🗑️
+              </button>
+            {% endif %}
+          </div>
         </div>
         <p>{{ note.content or '(Empty note)' }}</p>
         <div class="note-card-meta">{{ note.author }} · {{ note.updated_at.strftime('%d %b %Y') if note.updated_at else '' }}</div>
@@ -85,12 +92,9 @@ async function saveNote(spaceId) {
 
 async function deleteNote(spaceId) {
   const noteId = document.getElementById('note-id').value;
-  if (!noteId || !confirm('Delete this note?')) return;
-  const res  = await fetch(`/spaces/${spaceId}/notes/${noteId}/delete`, {method:'POST'});
-  const data = await res.json();
-  showFlash(data.message || data.error,'info');
+  if (!noteId) return;
   closeModalBtn();
-  window.location.reload();
+  await deleteNoteItem(noteId);
 }
 </script>
 {% endblock %}

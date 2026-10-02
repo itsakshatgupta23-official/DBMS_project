@@ -54,6 +54,11 @@
           <button type="button" class="btn-pin-note" onclick="pinToNotes({{ msg.message_id }}, this)" title="Pin to Notes">
             📌 Pin to Notes
           </button>
+          {% if msg.is_mine or role == 'HOST' %}
+            <button type="button" class="btn-delete-item" onclick="deleteChatMessage({{ msg.message_id }})" title="Delete message">
+              🗑️
+            </button>
+          {% endif %}
         </div>
       </div>
     {% endfor %}

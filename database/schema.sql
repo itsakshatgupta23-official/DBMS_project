@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     file_type         VARCHAR(50) DEFAULT NULL,
     original_filename VARCHAR(255) DEFAULT NULL,
     is_pinned         TINYINT(1) DEFAULT 0,
+    is_read           BOOLEAN DEFAULT FALSE,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (space_id)  REFERENCES spaces(space_id) ON DELETE CASCADE,
     FOREIGN KEY (sender_id) REFERENCES users(user_id)   ON DELETE CASCADE
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS media (
     file_type           VARCHAR(50)  NOT NULL,
     file_size           INT NOT NULL CHECK (file_size <= 1048576),
     visibility          ENUM('ALL','SELECTED') DEFAULT 'ALL',
+    seen                BOOLEAN DEFAULT FALSE,
     uploaded_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (space_id)    REFERENCES spaces(space_id) ON DELETE CASCADE,
     FOREIGN KEY (uploaded_by) REFERENCES users(user_id)   ON DELETE CASCADE
@@ -181,6 +183,7 @@ CREATE TABLE IF NOT EXISTS notes (
     title             VARCHAR(100) NOT NULL,
     content           TEXT,
     source_message_id INT DEFAULT NULL,
+    seen              BOOLEAN DEFAULT FALSE,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (space_id)          REFERENCES spaces(space_id)        ON DELETE CASCADE,

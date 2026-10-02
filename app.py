@@ -4,7 +4,7 @@ app.py – Chronicle Flask Application Factory
 
 from datetime import timedelta
 import cloudinary
-from flask import Flask, render_template, session, redirect, url_for
+from flask import Flask, render_template, session, redirect, url_for, request
 
 from config import Config
 import db
@@ -38,7 +38,7 @@ def create_app():
     from routes.expenses   import expenses_bp
     from routes.media      import media_bp
     from routes.chat       import chat_bp, messages_bp
-    from routes.notes      import notes_bp
+    from routes.notes      import notes_bp, notes_action_bp
     from routes.notifications import notifications_bp
 
     app.register_blueprint(auth_bp)
@@ -50,7 +50,60 @@ def create_app():
     app.register_blueprint(chat_bp)
     app.register_blueprint(messages_bp)
     app.register_blueprint(notes_bp)
+    app.register_blueprint(notes_action_bp)
     app.register_blueprint(notifications_bp)
+
+    # ── Context Processor for Unread Dots / Badges ────────────
+    @app.context_processor
+    def inject_unread_badges():
+        if "user_id" in session:
+            try:
+                user_id = session["user_id"]
+                if request.view_args and "space_id" in request.view_args:
+                    space_id = request.view_args["space_id"]
+                    unread_chat = db.run_query(
+                        "SELECT 1 FROM chat_messages WHERE space_id=%s AND sender_id != %s AND is_read = FALSE LIMIT 1",
+                        (space_id, user_id), fetch="one", action_label="CTX_UNREAD_CHAT"
+                    )
+                    unseen_img = db.run_query(
+                        "SELECT 1 FROM media WHERE space_id=%s AND uploaded_by != %s AND seen = FALSE LIMIT 1",
+                        (space_id, user_id), fetch="one", action_label="CTX_UNSEEN_MEDIA"
+                    )
+                    unseen_note = db.run_query(
+                        "SELECT 1 FROM notes WHERE space_id=%s AND created_by != %s AND seen = FALSE LIMIT 1",
+                        (space_id, user_id), fetch="one", action_label="CTX_UNSEEN_NOTE"
+                    )
+                else:
+                    unread_chat = db.run_query(
+                        """SELECT 1 FROM chat_messages cm
+                           JOIN space_members sm ON sm.space_id = cm.space_id
+                           WHERE sm.user_id = %s AND cm.sender_id != %s AND cm.is_read = FALSE LIMIT 1""",
+                        (user_id, user_id), fetch="one", action_label="CTX_GLOBAL_UNREAD_CHAT"
+                    )
+                    unseen_img = db.run_query(
+                        """SELECT 1 FROM media m
+                           JOIN space_members sm ON sm.space_id = m.space_id
+                           WHERE sm.user_id = %s AND m.uploaded_by != %s AND m.seen = FALSE LIMIT 1""",
+                        (user_id, user_id), fetch="one", action_label="CTX_GLOBAL_UNSEEN_MEDIA"
+                    )
+                    unseen_note = db.run_query(
+                        """SELECT 1 FROM notes n
+                           JOIN space_members sm ON sm.space_id = n.space_id
+                           WHERE sm.user_id = %s AND n.created_by != %s AND n.seen = FALSE LIMIT 1""",
+                        (user_id, user_id), fetch="one", action_label="CTX_GLOBAL_UNSEEN_NOTE"
+                    )
+                return {
+                    "has_unread_chats": bool(unread_chat),
+                    "has_unseen_images": bool(unseen_img),
+                    "has_unseen_notes": bool(unseen_note),
+                }
+            except Exception:
+                pass
+        return {
+            "has_unread_chats": False,
+            "has_unseen_images": False,
+            "has_unseen_notes": False,
+        }
 
     # ── Core routes ───────────────────────────────────────────
     @app.route("/")
