@@ -1,0 +1,23 @@
+<!-- Join Requests Modal (loaded via fetch for host) -->
+<div>
+  <div class="modal-title">🔔 Join Requests</div>
+  {% if requests %}
+    <div id="join-requests-list">
+      {% for req in requests %}
+        <div id="request-{{ req.request_id }}" class="member-item join-request-card" style="margin-bottom:0.5rem;">
+          <div class="member-avatar">{{ req.username[0].upper() }}</div>
+          <div class="member-info">
+            <div class="member-name">{{ req.username }}</div>
+            <div class="member-since">{{ req.requested_at.strftime('%d %b %Y %H:%M') if req.requested_at else '' }}</div>
+          </div>
+          <div style="display:flex;gap:0.4rem;">
+            <button onclick="decideRequest({{ req.request_id }}, 'APPROVED', this)" class="btn btn-success btn-sm btn-approve">Approve</button>
+            <button onclick="decideRequest({{ req.request_id }}, 'REJECTED', this)" class="btn btn-danger btn-sm btn-reject">Reject</button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-muted" style="text-align:center;padding:1rem;">No pending requests.</p>
+  {% endif %}
+</div>

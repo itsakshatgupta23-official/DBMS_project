@@ -1,0 +1,15 @@
+<!-- Join Space Modal (loaded via fetch) -->
+<div>
+  <div class="modal-title">🔗 Join a Space</div>
+  <form onsubmit="submitModalForm(event, '/spaces/join')">
+    <div class="form-group">
+      <label>Invite Code</label>
+      <input type="text" name="invite_code" class="form-control"
+             placeholder="ABC123" maxlength="10"
+             style="text-transform:uppercase;letter-spacing:0.15em;font-size:1.2rem;"
+             required oninput="this.value=this.value.toUpperCase()" />
+    </div>
+    <p class="text-muted" style="font-size:0.82rem;margin-bottom:1rem;">Ask the space host for the 6-character invite code.</p>
+    <button type="submit" class="btn btn-primary btn-full">Request to Join</button>
+  </form>
+</div>

@@ -1,0 +1,122 @@
+{% extends "space/layout.html" %}
+{% block title %}Gallery – {{ space.name }}{% endblock %}
+
+{% block space_content %}
+<div class="page-header">
+  <div>
+    <h1>🖼️ Gallery</h1>
+    <p class="text-muted">{{ space.name }}</p>
+  </div>
+  <button class="btn btn-primary" onclick="showUploadModal()">⬆ Upload Media</button>
+</div>
+
+{% if media %}
+  <div class="gallery-grid">
+    {% for m in media %}
+      {% if m.can_view %}
+        <div class="gallery-item" onclick="viewMedia({{ m.media_id }})">
+          {% if m.file_type in ['jpg','jpeg','png','gif','webp'] %}
+            <img src="{{ m.file_path }}" alt="{{ m.media_id }}" loading="lazy" />
+          {% else %}
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;background:var(--glass-bg);">
+              <span style="font-size:2rem;">📄</span>
+              <span style="font-size:0.7rem;margin-top:0.5rem;">{{ m.file_type }}</span>
+            </div>
+          {% endif %}
+          <div class="gallery-item-overlay">
+            <span class="gallery-item-name">{{ m.uploader_name }} · {{ m.uploaded_at.strftime('%d %b') if m.uploaded_at else '' }}</span>
+            <div class="gallery-actions" onclick="event.stopPropagation()">
+              <a href="{{ m.file_path.replace('/upload/', '/upload/fl_attachment/') if '/upload/' in m.file_path else url_for('media.download_media', media_id=m.media_id) }}" 
+                 download="media_{{ m.media_id }}.{{ m.file_type }}"
+                 target="_blank"
+                 class="btn-download" title="Download">
+                 📥 Download
+              </a>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state glass-card">
+    <span class="empty-icon">📷</span>
+    <h2>No media yet</h2>
+    <p>Upload photos and files to share with the space.</p>
+  </div>
+{% endif %}
+
+<!-- Upload modal template -->
+<template id="upload-tpl">
+  <div>
+    <div class="modal-title">Upload Media</div>
+    <div class="form-group">
+      <label>File <small>(max 1MB)</small></label>
+      <input type="file" id="upload-file" class="form-control" accept="image/*,video/*,.pdf,.doc,.docx" />
+    </div>
+    <div class="form-group">
+      <label>Visibility</label>
+      <select id="upload-visibility" class="form-control" onchange="toggleRecipients()">
+        <option value="ALL">All members</option>
+        <option value="SELECTED">Selected members only</option>
+      </select>
+    </div>
+    <div id="recipients-section" style="display:none;" class="form-group">
+      <label>Select Recipients</label>
+      {% for m in members %}
+        {% if m.user_id != session.user_id %}
+          <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;cursor:pointer;">
+            <input type="checkbox" class="recipient-check" value="{{ m.user_id }}" />
+            {{ m.username }}
+          </label>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <button class="btn btn-primary btn-full mt-4" onclick="submitUpload({{ space.space_id }})">Upload</button>
+  </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showUploadModal() {
+  const tpl = document.getElementById('upload-tpl');
+  document.getElementById('modal-content').innerHTML = tpl.innerHTML;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.body.style.overflow='hidden';
+}
+
+function toggleRecipients() {
+  const vis = document.getElementById('upload-visibility').value;
+  document.getElementById('recipients-section').style.display = (vis === 'SELECTED') ? 'block' : 'none';
+}
+
+async function submitUpload(spaceId) {
+  const fileInput = document.getElementById('upload-file');
+  const file = fileInput.files[0];
+  if (!file) { showFlash('Please select a file.','warning'); return; }
+
+  const visibility = document.getElementById('upload-visibility').value;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('visibility', visibility);
+
+  if (visibility === 'SELECTED') {
+    document.querySelectorAll('.recipient-check:checked').forEach(cb => {
+      fd.append('recipients', cb.value);
+    });
+  }
+
+  const res  = await fetch(`/spaces/${spaceId}/media/upload`, { method:'POST', body: fd });
+  const data = await res.json();
+  if (data.error) { showFlash(data.error,'danger'); return; }
+  showFlash('Uploaded!','success');
+  closeModalBtn();
+  window.location.reload();
+}
+
+function viewMedia(mediaId) {
+  window.open(`/media/${mediaId}/view`, '_blank');
+}
+</script>
+{% endblock %}

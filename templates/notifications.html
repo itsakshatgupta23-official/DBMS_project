@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Notifications – Chronicle{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h1>🔔 Notifications</h1>
+  </div>
+
+  {% if notifications %}
+    <div class="notif-list glass-card" style="padding:1rem;">
+      {% for n in notifications %}
+        <div class="notif-item {% if not n.is_read %}unread{% endif %}">
+          <div class="notif-msg">{{ n.message }}</div>
+          <div class="notif-time">{{ n.created_at.strftime('%d %b %H:%M') if n.created_at else '' }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state glass-card">
+      <span class="empty-icon">🔕</span>
+      <h2>All caught up!</h2>
+      <p>No notifications yet.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

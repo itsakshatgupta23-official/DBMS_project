@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ space.name }} – Chronicle{% endblock %}
+
+{% block content %}
+<div class="space-layout" data-space-id="{{ space.space_id }}">
+  <!-- Sidebar -->
+  <nav class="space-sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-header h3">SPACE</div>
+      <div class="sidebar-space-name">{{ space.name }}</div>
+      <div style="font-size:0.7rem;color:var(--text-muted);">{{ space.space_type }}</div>
+    </div>
+    <div class="sidebar-nav">
+      <a href="{{ url_for('spaces.space_home',  space_id=space.space_id) }}"  class="sidebar-link {% if request.endpoint=='spaces.space_home' %}active{% endif %}"><span class="icon">🏠</span> <span class="label">Home</span></a>
+      <a href="{{ url_for('chat.group_chat',    space_id=space.space_id) }}"  class="sidebar-link {% if 'chat' in request.endpoint %}active{% endif %}"><span class="icon">💬</span> <span class="label">Chat</span></a>
+      <a href="{{ url_for('expenses.list_expenses', space_id=space.space_id) }}" class="sidebar-link {% if 'expense' in request.endpoint %}active{% endif %}"><span class="icon">💰</span> <span class="label">Expenses</span></a>
+      <a href="{{ url_for('media.gallery',      space_id=space.space_id) }}"  class="sidebar-link {% if 'gallery' in request.endpoint %}active{% endif %}"><span class="icon">🖼️</span> <span class="label">Gallery</span></a>
+      <a href="{{ url_for('notes.list_notes',   space_id=space.space_id) }}"  class="sidebar-link {% if 'note' in request.endpoint %}active{% endif %}"><span class="icon">📝</span> <span class="label">Notes</span></a>
+      {% if role == 'HOST' %}
+      <hr style="border-color:var(--glass-border);margin:0.5rem 0.75rem;">
+      <a href="#" class="sidebar-link sidebar-item" onclick="openJoinRequestsModal({{ space.space_id }});return false;">
+        <span class="icon">🔔</span>
+        <span class="label">Join Requests</span>
+        <span id="join-requests-badge" class="badge-count" style="display: none;">0</span>
+      </a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <!-- Page content -->
+  <div class="space-main">
+    {% block space_content %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "space/layout.html" %}
+{% block title %}Notes – {{ space.name }}{% endblock %}
+
+{% block space_content %}
+<div class="page-header">
+  <div>
+    <h1>📝 Notes</h1>
+    <p class="text-muted">{{ space.name }}</p>
+  </div>
+  <button class="btn btn-primary" onclick="openNoteModal()">＋ New Note</button>
+</div>
+
+{% if notes %}
+  <div class="notes-grid">
+    {% for note in notes %}
+      <div class="note-card" onclick="editNote({{ space.space_id }}, {{ note.note_id }})">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+          <h4>{{ note.title }}</h4>
+          {% if note.source_message_id %}
+            <span class="badge" style="background:rgba(252,108,38,0.2);color:var(--accent);border:1px solid rgba(252,108,38,0.35);font-size:0.7rem;padding:0.2rem 0.4rem;border-radius:4px;white-space:nowrap;">📌 Chat</span>
+          {% endif %}
+        </div>
+        <p>{{ note.content or '(Empty note)' }}</p>
+        <div class="note-card-meta">{{ note.author }} · {{ note.updated_at.strftime('%d %b %Y') if note.updated_at else '' }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state glass-card">
+    <span class="empty-icon">📝</span>
+    <h2>No notes yet</h2>
+    <p>Start the first note for this space.</p>
+  </div>
+{% endif %}
+
+<template id="note-tpl">
+  <div>
+    <div class="modal-title" id="note-modal-title">New Note</div>
+    <input type="hidden" id="note-id" value="" />
+    <div class="form-group"><label>Title</label><input id="note-title" class="form-control" placeholder="Note title" required /></div>
+    <div class="form-group"><label>Content</label><textarea id="note-content" class="form-control" rows="6" placeholder="Write your note…"></textarea></div>
+    <div style="display:flex;gap:0.75rem;margin-top:1rem;">
+      <button class="btn btn-primary btn-full" onclick="saveNote({{ space.space_id }})">Save</button>
+      <button class="btn btn-danger" id="note-delete-btn" style="display:none;" onclick="deleteNote({{ space.space_id }})">Delete</button>
+    </div>
+  </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openNoteModal(title='', content='', noteId='') {
+  const tpl = document.getElementById('note-tpl');
+  document.getElementById('modal-content').innerHTML = tpl.innerHTML;
+  document.getElementById('note-id').value    = noteId;
+  document.getElementById('note-title').value = title;
+  document.getElementById('note-content').value = content;
+  if (noteId) {
+    document.getElementById('note-modal-title').textContent = 'Edit Note';
+    document.getElementById('note-delete-btn').style.display = 'inline-flex';
+  }
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.body.style.overflow='hidden';
+}
+
+async function editNote(spaceId, noteId) {
+  const res  = await fetch(`/spaces/${spaceId}/notes/${noteId}`);
+  const data = await res.json();
+  if (data.note) openNoteModal(data.note.title, data.note.content, noteId);
+}
+
+async function saveNote(spaceId) {
+  const noteId  = document.getElementById('note-id').value;
+  const title   = document.getElementById('note-title').value.trim();
+  const content = document.getElementById('note-content').value;
+  const isNew   = !noteId;
+  const url  = isNew ? `/spaces/${spaceId}/notes/add` : `/spaces/${spaceId}/notes/${noteId}/update`;
+  const res  = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,content})});
+  const data = await res.json();
+  if (data.error) { showFlash(data.error,'danger'); return; }
+  showFlash(data.message,'success');
+  closeModalBtn();
+  window.location.reload();
+}
+
+async function deleteNote(spaceId) {
+  const noteId = document.getElementById('note-id').value;
+  if (!noteId || !confirm('Delete this note?')) return;
+  const res  = await fetch(`/spaces/${spaceId}/notes/${noteId}/delete`, {method:'POST'});
+  const data = await res.json();
+  showFlash(data.message || data.error,'info');
+  closeModalBtn();
+  window.location.reload();
+}
+</script>
+{% endblock %}

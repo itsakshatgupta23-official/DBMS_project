@@ -1,0 +1,87 @@
+{% extends "space/layout.html" %}
+{% block title %}Chat – {{ space.name }}{% endblock %}
+
+{% block space_content %}
+<div class="page-header">
+  <div>
+    <h1>💬 {% if is_private %}DM: {{ other_user.username }}{% else %}Group Chat{% endif %}</h1>
+    <p class="text-muted">{{ space.name }}</p>
+  </div>
+  {% if not is_private %}
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+      {% for m in members %}
+        <a href="{{ url_for('chat.private_chat', space_id=space.space_id, other_user_id=m.user_id) }}"
+           class="btn btn-outline btn-sm">💬 {{ m.username }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<div class="chat-container glass-card" style="padding:0;overflow:hidden;">
+  <div class="chat-messages" id="chat-messages">
+    {% for msg in messages %}
+      <div class="chat-msg {% if msg.is_mine %}chat-msg-mine{% else %}chat-msg-other{% endif %}"
+           data-msg-id="{{ msg.message_id }}">
+        {% if not msg.is_mine %}<div class="chat-msg-sender">{{ msg.sender }}</div>{% endif %}
+        {% if msg.message %}<div class="chat-msg-text">{{ msg.message }}</div>{% endif %}
+        {% if msg.file_url %}
+          {% set is_img = (msg.file_type and msg.file_type|lower in ['jpg','jpeg','png','gif','webp','svg']) or (msg.file_url and ('.jpg' in msg.file_url or '.jpeg' in msg.file_url or '.png' in msg.file_url or '.gif' in msg.file_url or '.webp' in msg.file_url)) %}
+          {% set dl_url = msg.file_url.replace('/upload/', '/upload/fl_attachment/') if '/upload/' in msg.file_url else msg.file_url %}
+          {% set filename = msg.original_filename or ('Photo' if is_img else 'Attachment') %}
+          {% if is_img %}
+            <div class="chat-attachment-img-box">
+              <a href="{{ msg.file_url }}" target="_blank">
+                <img src="{{ msg.file_url }}" alt="{{ filename }}" class="chat-img-thumb" loading="lazy" />
+              </a>
+              <div class="chat-attachment-meta">
+                <span class="chat-filename">{{ filename }}</span>
+                <a href="{{ dl_url }}" download="{{ filename }}" target="_blank" class="btn-chat-dl">📥 Download</a>
+              </div>
+            </div>
+          {% else %}
+            <div class="chat-attachment-doc-box">
+              <div class="chat-doc-info">
+                <span class="chat-doc-icon">📄</span>
+                <span class="chat-filename">{{ filename }}</span>
+              </div>
+              <a href="{{ dl_url }}" download="{{ filename }}" target="_blank" class="btn-chat-dl">📥 Download</a>
+            </div>
+          {% endif %}
+        {% endif %}
+        <div class="chat-msg-footer">
+          <span class="chat-msg-time">{{ msg.created_at.strftime('%H:%M') if msg.created_at else '' }}</span>
+          <span class="pin-badge {% if not msg.is_pinned %}hidden{% endif %}" id="pin-badge-{{ msg.message_id }}" title="Pinned to Notes">📌</span>
+          <button type="button" class="btn-pin-note" onclick="pinToNotes({{ msg.message_id }}, this)" title="Pin to Notes">
+            📌 Pin to Notes
+          </button>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="chat-input-container">
+    <div id="chat-file-preview" class="chat-file-preview hidden">
+      <span id="chat-file-name"></span>
+      <button type="button" class="chat-file-preview-close" onclick="clearChatFile()" title="Remove file">×</button>
+    </div>
+    <form class="chat-input-bar" onsubmit="sendChatMessage(event, {{ space.space_id }}{% if is_private %}, {{ conversation_id }}{% endif %})">
+      <button type="button" class="chat-btn-attach" onclick="document.getElementById('chat-file-input').click()" title="Attach file">📎</button>
+      <input type="file" id="chat-file-input" name="file" style="display:none;" onchange="handleChatFileSelect(this)" accept="image/*,.pdf,.doc,.docx,.txt" />
+      <input type="text" id="chat-input" class="form-control chat-input" placeholder="Type a message or attach a file…" autocomplete="off" />
+      <button type="submit" class="btn btn-primary" id="chat-send-btn">Send</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  {% if is_private %}
+    startChatPolling({{ space.space_id }}, {{ conversation_id }});
+  {% else %}
+    startChatPolling({{ space.space_id }});
+  {% endif %}
+});
+</script>
+{% endblock %}

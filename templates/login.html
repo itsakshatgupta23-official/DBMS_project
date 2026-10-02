@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Login – Chronicle{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card glass-card">
+    <div class="auth-header">
+      <span class="auth-icon">📖</span>
+      <h1>Welcome back</h1>
+      <p>Sign in to Chronicle</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('auth.login') }}" class="auth-form">
+      <div class="form-group">
+        <label for="identifier">Username or Email</label>
+        <input type="text" id="identifier" name="identifier"
+               class="form-control" placeholder="yourname or email@example.com"
+               required autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password"
+               class="form-control" placeholder="••••••••"
+               required autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+    </form>
+
+    <p class="auth-footer">
+      Don't have an account?
+      <a href="{{ url_for('auth.register') }}">Create one</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

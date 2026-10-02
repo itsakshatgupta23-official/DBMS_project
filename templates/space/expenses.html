@@ -1,0 +1,238 @@
+{% extends "space/layout.html" %}
+{% block title %}Expenses – {{ space.name }}{% endblock %}
+
+{% block space_content %}
+<div class="page-header">
+  <div>
+    <h1>💰 Expenses</h1>
+    <p class="text-muted">{{ space.name }}</p>
+  </div>
+</div>
+
+<!-- ── Balance Summary (Khatabook style) ──────────────────────── -->
+{% set total_give = namespace(val=0) %}
+{% set total_get  = namespace(val=0) %}
+{% for s in settlements %}
+  {% if s.from_user == session.user_id %}
+    {% set total_give.val = total_give.val + s.amount %}
+  {% elif s.to_user == session.user_id %}
+    {% set total_get.val = total_get.val + s.amount %}
+  {% endif %}
+{% endfor %}
+
+<div class="balance-summary">
+  <div class="balance-card">
+    <div class="balance-card-label">You Will Give</div>
+    <div class="balance-card-amount give">₹{{ '%.2f'|format(total_give.val) }}</div>
+    <div class="balance-card-sub">Total you owe others</div>
+  </div>
+  <div class="balance-card">
+    <div class="balance-card-label">You Will Get</div>
+    <div class="balance-card-amount get">₹{{ '%.2f'|format(total_get.val) }}</div>
+    <div class="balance-card-sub">Total owed to you</div>
+  </div>
+</div>
+
+<!-- ── Member Balances ─────────────────────────────────────────── -->
+{% if settlements %}
+<div class="glass-card mb-4">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h3>⚖ Settlement Balances</h3>
+  </div>
+  <div class="member-balance-list">
+    {% for s in settlements %}
+    <div class="member-balance-card" id="settle-{{ s.settlement_id }}">
+      <div class="member-balance-avatar">
+        {{ s.from_name[0].upper() }}
+      </div>
+      <div class="member-balance-info">
+        <div class="member-balance-name">{{ s.from_name }}</div>
+        <div class="member-balance-sub">owes → {{ s.to_name }}</div>
+      </div>
+      <div class="member-balance-amount {% if s.from_user == session.user_id %}owe{% elif s.to_user == session.user_id %}owed{% else %}owe{% endif %}">
+        ₹{{ '%.2f'|format(s.amount) }}
+      </div>
+      {% if s.from_user == session.user_id %}
+        <button class="btn btn-success btn-sm" onclick="markSettlementPaid({{ s.settlement_id }}, this, {{ space.space_id }})">✓ Paid</button>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Simplified Add Expense Panel ──────────────────────────── -->
+<div class="add-expense-panel mb-4">
+  <h3 style="margin-bottom:1.1rem;font-size:1.05rem;">＋ Add New Expense</h3>
+  <form id="inline-expense-form" onsubmit="submitInlineExpense(event, {{ space.space_id }})">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Amount (₹)</label>
+        <input type="number" id="exp-amount" class="form-control" step="0.01" min="0.01"
+               placeholder="500.00" required oninput="updateSplitPreview()" />
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Description</label>
+        <input type="text" id="exp-desc" class="form-control" placeholder="e.g. Hotel booking" required />
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:1rem;">
+      <label>Paid By</label>
+      <select id="exp-paidby" class="form-control">
+        {% for m in members %}
+          <option value="{{ m.user_id }}" {% if m.user_id == session.user_id %}selected{% endif %}>{{ m.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Split Among <span style="font-size:0.75rem;text-transform:none;font-weight:400;color:var(--text-muted);">(select members)</span></label>
+      <div class="member-checkbox-list" id="member-checkbox-list">
+        {% for m in members %}
+        <div class="member-checkbox-item">
+          <input type="checkbox" id="chk-{{ m.user_id }}" value="{{ m.user_id }}"
+                 class="expense-member-chk" checked onchange="updateSplitPreview()" />
+          <label for="chk-{{ m.user_id }}">{{ m.username }}</label>
+          <span class="member-share-tag" id="share-tag-{{ m.user_id }}">₹0</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Split Preview -->
+    <div class="expense-split-preview" id="split-preview">
+      Enter an amount above to see equal split per member.
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-full mt-4" id="inline-submit-btn">
+      ＋ Add Expense
+    </button>
+  </form>
+</div>
+
+<!-- ── All Expenses List ──────────────────────────────────────── -->
+<div class="glass-card">
+  <h3 style="margin-bottom:1rem;">🧾 All Expenses</h3>
+  {% if expenses %}
+    <div class="expense-list">
+      {% for e in expenses %}
+        <div class="expense-item">
+          <div>
+            <div style="font-weight:600;color:var(--text-color);">{{ e.description }}</div>
+            <div class="expense-meta">Paid by <strong>{{ e.payer }}</strong> · {{ e.created_at.strftime('%d %b %Y') if e.created_at else '' }}</div>
+          </div>
+          <div class="expense-amount">₹{{ '%.2f'|format(e.amount) }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state" style="padding:2rem;">
+      <span class="empty-icon">🧾</span>
+      <p>No expenses yet. Add the first one above!</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Live Equal-Split Preview ─────────────────────────────────
+function updateSplitPreview() {
+  const amount   = parseFloat(document.getElementById('exp-amount').value) || 0;
+  const checked  = Array.from(document.querySelectorAll('.expense-member-chk:checked'));
+  const count    = checked.length;
+  const preview  = document.getElementById('split-preview');
+
+  // Reset all share tags first
+  document.querySelectorAll('.member-share-tag').forEach(t => t.textContent = '₹0');
+
+  if (amount <= 0 || count === 0) {
+    preview.innerHTML = 'Enter an amount above to see equal split per member.';
+    return;
+  }
+
+  const share = (amount / count).toFixed(2);
+  checked.forEach(chk => {
+    const tag = document.getElementById('share-tag-' + chk.value);
+    if (tag) tag.textContent = '₹' + share;
+  });
+
+  preview.innerHTML = `<strong>₹${share}</strong> each &nbsp;·&nbsp; ${count} member${count !== 1 ? 's' : ''} &nbsp;·&nbsp; Total ₹${amount.toFixed(2)}`;
+}
+
+// ── Submit Inline Expense ─────────────────────────────────────
+async function submitInlineExpense(event, spaceId) {
+  event.preventDefault();
+  const btn = document.getElementById('inline-submit-btn');
+
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+  const desc   = document.getElementById('exp-desc').value.trim();
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const paidBy = parseInt(document.getElementById('exp-paidby').value);
+
+  if (!desc || isNaN(amount) || amount <= 0) {
+    showFlash('Please enter a valid description and amount.', 'danger');
+    btn.disabled = false;
+    btn.innerHTML = '＋ Add Expense';
+    return;
+  }
+
+  const checked = Array.from(document.querySelectorAll('.expense-member-chk:checked'));
+  if (checked.length === 0) {
+    showFlash('Please select at least one member to split with.', 'danger');
+    btn.disabled = false;
+    btn.innerHTML = '＋ Add Expense';
+    return;
+  }
+
+  // Build manual splits based on checked members (equal division)
+  const share = parseFloat((amount / checked.length).toFixed(2));
+  const splits = {};
+  checked.forEach((chk, i) => {
+    // Last member absorbs rounding remainder
+    if (i === checked.length - 1) {
+      const alreadyAssigned = share * (checked.length - 1);
+      splits[chk.value] = parseFloat((amount - alreadyAssigned).toFixed(2));
+    } else {
+      splits[chk.value] = share;
+    }
+  });
+
+  const payload = {
+    description: desc,
+    amount,
+    paid_by: paidBy,
+    split_type: 'manual',
+    splits
+  };
+
+  try {
+    const res  = await fetch(`/spaces/${spaceId}/expenses/add`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.error) {
+      showFlash(data.error, 'danger');
+      return;
+    }
+    showFlash('Expense added! 🎉', 'success');
+    window.location.reload();
+  } catch (err) {
+    showFlash('Network error: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '＋ Add Expense';
+  }
+}
+
+// Initialize preview on load
+document.addEventListener('DOMContentLoaded', updateSplitPreview);
+</script>
+{% endblock %}

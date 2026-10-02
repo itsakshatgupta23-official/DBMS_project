@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}SQL Log – Chronicle Dev{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <div>
+      <h1>⚙ SQL Query Log</h1>
+      <p class="text-muted">
+        Total: <strong>{{ stats.total or 0 }}</strong> &nbsp;|&nbsp;
+        ✅ {{ stats.success_count or 0 }} &nbsp;|&nbsp;
+        ❌ {{ stats.fail_count or 0 }} &nbsp;|&nbsp;
+        ⏱ Avg {{ stats.avg_ms or 0 }}ms &nbsp;|&nbsp;
+        Max {{ stats.max_ms or 0 }}ms
+      </p>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <form method="GET" class="filter-bar glass-card">
+    <select name="status" class="form-control form-control-sm">
+      <option value="">All Status</option>
+      <option value="SUCCESS" {% if filters.status == 'SUCCESS' %}selected{% endif %}>SUCCESS</option>
+      <option value="FAILED"  {% if filters.status == 'FAILED'  %}selected{% endif %}>FAILED</option>
+    </select>
+    <select name="q_type" class="form-control form-control-sm">
+      <option value="">All Types</option>
+      {% for t in ['SELECT','INSERT','UPDATE','DELETE','EXPLAIN','CALL'] %}
+        <option value="{{ t }}" {% if filters.q_type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="route"  class="form-control form-control-sm" placeholder="Route…" value="{{ filters.route }}"/>
+    <input type="text" name="action" class="form-control form-control-sm" placeholder="Action label…" value="{{ filters.action }}"/>
+    <select name="limit" class="form-control form-control-sm">
+      {% for l in [25, 50, 100, 200] %}
+        <option value="{{ l }}" {% if filters.limit == l %}selected{% endif %}>{{ l }} rows</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+    <a href="{{ url_for('dev.sql_log') }}" class="btn btn-outline btn-sm">Reset</a>
+  </form>
+
+  <!-- EXPLAIN sandbox -->
+  <div class="glass-card mb-4">
+    <h3>🔬 EXPLAIN Sandbox</h3>
+    <textarea id="explain-sql" class="form-control code-area" rows="3" placeholder="SELECT * FROM users WHERE …"></textarea>
+    <button class="btn btn-secondary mt-2" onclick="runExplain()">Run EXPLAIN</button>
+    <pre id="explain-result" class="code-output hidden"></pre>
+  </div>
+
+  <!-- Log Table -->
+  <div class="table-wrapper glass-card">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Time</th><th>User</th><th>Action</th>
+          <th>Type</th><th>Route</th><th>Status</th>
+          <th>Duration</th><th>Rows</th><th>SQL</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+          <tr class="{% if log.status == 'FAILED' %}row-error{% endif %}">
+            <td>{{ log.log_id }}</td>
+            <td class="nowrap">{{ log.created_at.strftime('%H:%M:%S') if log.created_at else '' }}</td>
+            <td>{{ log.username or '—' }}</td>
+            <td><code>{{ log.action_label }}</code></td>
+            <td><span class="qtype-badge qtype-{{ log.query_type|lower }}">{{ log.query_type }}</span></td>
+            <td class="nowrap">{{ log.route or '—' }}</td>
+            <td>
+              <span class="status-badge status-{{ log.status|lower }}">{{ log.status }}</span>
+              {% if log.error_message %}
+                <span class="tooltip-icon" title="{{ log.error_message }}">⚠</span>
+              {% endif %}
+            </td>
+            <td class="nowrap">{{ log.duration_ms }}ms</td>
+            <td>{{ log.rows_affected }}</td>
+            <td>
+              <button class="btn btn-xs btn-outline" onclick="toggleSql(this)">Show</button>
+              <pre class="sql-text hidden">{{ log.sql_text }}
+{% if log.params_json %}<em>Params: {{ log.params_json }}</em>{% endif %}</pre>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="10" class="text-center text-muted">No logs found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runExplain() {
+  const sql = document.getElementById('explain-sql').value.trim();
+  const out = document.getElementById('explain-result');
+  out.classList.remove('hidden');
+  out.textContent = 'Running…';
+  try {
+    const res = await fetch('/dev/explain', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({sql})
+    });
+    const data = await res.json();
+    if (data.error) { out.textContent = '❌ ' + data.error; return; }
+    out.textContent = JSON.stringify(data.rows, null, 2);
+  } catch(e) { out.textContent = '❌ Network error: ' + e.message; }
+}
+
+function toggleSql(btn) {
+  const pre = btn.nextElementSibling;
+  const hidden = pre.classList.toggle('hidden');
+  btn.textContent = hidden ? 'Show' : 'Hide';
+}
+</script>
+{% endblock %}

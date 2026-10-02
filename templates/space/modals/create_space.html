@@ -1,0 +1,23 @@
+<!-- Create Space Modal (loaded via fetch) -->
+<div>
+  <div class="modal-title">✨ Create New Space</div>
+  <form id="create-space-form" onsubmit="createSpace(event)">
+    <div class="form-group">
+      <label>Space Name</label>
+      <input type="text" name="name" class="form-control" placeholder="Goa Trip 2024" required maxlength="100" />
+    </div>
+    <div class="form-group">
+      <label>Type</label>
+      <select name="space_type" class="form-control">
+        {% for t in ['Trip','Hostel','College Event','Party','Family Event','Project Group','Other'] %}
+          <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Description <small>(optional)</small></label>
+      <textarea name="description" class="form-control" rows="3" placeholder="A brief description…"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary btn-full">Create Space</button>
+  </form>
+</div>

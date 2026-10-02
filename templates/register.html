@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Register – Chronicle{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card glass-card">
+    <div class="auth-header">
+      <span class="auth-icon">✨</span>
+      <h1>Create account</h1>
+      <p>Join Chronicle today</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('auth.register') }}" class="auth-form">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username"
+               class="form-control" placeholder="coolname123"
+               required minlength="3" maxlength="50" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email"
+               class="form-control" placeholder="you@college.edu"
+               required autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="password">Password <small>(min 8 chars)</small></label>
+        <input type="password" id="password" name="password"
+               class="form-control" placeholder="••••••••"
+               required minlength="8" autocomplete="new-password" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+    </form>
+
+    <p class="auth-footer">
+      Already have an account?
+      <a href="{{ url_for('auth.login') }}">Sign in</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

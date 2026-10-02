@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – Chronicle{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <div>
+      <h1>👋 Hello, {{ session.username }}</h1>
+      <p class="text-muted">Your active spaces</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-outline" onclick="openModal('/spaces/join-modal')">🔗 Join Space</button>
+      <button class="btn btn-primary" onclick="openModal('/spaces/create-modal')">＋ New Space</button>
+    </div>
+  </div>
+
+  {% if spaces %}
+    <div class="spaces-grid">
+      {% for space in spaces %}
+        <a href="{{ url_for('spaces.space_home', space_id=space.space_id) }}" class="space-card glass-card">
+          <div class="space-card-header">
+            <span class="space-type-badge">{{ space.space_type }}</span>
+            {% if space.role == 'HOST' %}
+              <span class="badge badge-host">HOST</span>
+            {% endif %}
+          </div>
+          <h3 class="space-name">{{ space.name }}</h3>
+          <p class="space-desc">{{ space.description[:80] ~ '…' if space.description and space.description|length > 80 else (space.description or '') }}</p>
+          <div class="space-meta">
+            <span>👥 {{ space.member_count }} members</span>
+            <span>{{ space.created_at.strftime('%d %b %Y') if space.created_at else '' }}</span>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state glass-card">
+      <span class="empty-icon">🌍</span>
+      <h2>No spaces yet</h2>
+      <p>Create a new space or join one with an invite code.</p>
+      <div style="display:flex;gap:1rem;justify-content:center;">
+        <button class="btn btn-outline" onclick="openModal('/spaces/join-modal')">Join Space</button>
+        <button class="btn btn-primary" onclick="openModal('/spaces/create-modal')">Create Space</button>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

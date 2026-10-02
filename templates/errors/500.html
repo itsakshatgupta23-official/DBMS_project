@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}500 Server Error – Chronicle{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card glass-card" style="text-align:center;">
+    <div class="auth-icon" style="font-size:3rem;">💥</div>
+    <h1>500 — Server Error</h1>
+    <p class="text-muted">Something went wrong on our end. Please try again later.</p>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-primary mt-4">Go to Dashboard</a>
+  </div>
+</div>
+{% endblock %}

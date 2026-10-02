@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Chronicle{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- ═══ TOP NAV ═══════════════════════════════════════════ -->
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ url_for('index') }}">
+    <span class="brand-icon">📖</span> Chronicle
+  </a>
+  <div class="navbar-links">
+    {% if session.get('user_id') %}
+      <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+      {% if session.get('is_developer') %}
+        <a href="{{ url_for('dev.sql_log') }}" class="nav-link nav-dev">⚙ Dev Log</a>
+      {% endif %}
+      <a href="{{ url_for('notifications.list_notifications') }}" class="nav-link nav-notif">
+        🔔 <span id="notif-badge">{{ notif_count | default(0) }}</span>
+      </a>
+      <a href="{{ url_for('auth.profile') }}" class="nav-link nav-user">
+        👤 {{ session.get('username') }}
+      </a>
+      <a href="{{ url_for('auth.logout') }}" class="nav-link nav-logout">Logout</a>
+    {% else %}
+      <a href="{{ url_for('auth.login') }}" class="nav-link">Login</a>
+      <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-sm">Sign Up</a>
+    {% endif %}
+  </div>
+</nav>
+
+<!-- ═══ FLASH MESSAGES ════════════════════════════════════ -->
+<div class="flash-container" id="flash-container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} flash-msg">
+        {{ message }}
+        <button class="alert-close" onclick="this.parentElement.remove()">×</button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+</div>
+
+<!-- ═══ MAIN CONTENT ══════════════════════════════════════ -->
+<main class="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- ═══ FOOTER ════════════════════════════════════════════ -->
+<footer class="footer">
+  <p>© 2024 Chronicle — College DBMS Project &nbsp;|&nbsp; Built with Flask &amp; MySQL</p>
+</footer>
+
+<!-- ═══ MODAL CONTAINER (shared) ═════════════════════════ -->
+<div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal-box" id="modal-box">
+    <button class="modal-close" onclick="closeModalBtn()">×</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
