@@ -2,237 +2,421 @@
 {% block title %}Expenses – {{ space.name }}{% endblock %}
 
 {% block space_content %}
-<div class="page-header">
+
+<!-- ── Page Header ─────────────────────────────────────────── -->
+<div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.5rem;">
   <div>
-    <h1>💰 Expenses</h1>
-    <p class="text-muted">{{ space.name }}</p>
+    <h1 style="margin:0;font-size:1.5rem;">💰 Expenses</h1>
+    <p class="text-muted" style="margin:0.25rem 0 0;">{{ space.name }}</p>
+  </div>
+  <button class="btn btn-primary" onclick="openAddExpenseModal()" style="display:flex;align-items:center;gap:0.4rem;font-weight:600;">
+    <span style="font-size:1.1rem;">＋</span> Add Expense
+  </button>
+</div>
+
+<!-- ── Summary Top Cards ────────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.75rem;">
+  <div class="glass-card" style="text-align:center;padding:1.25rem 1rem;border-left:4px solid #e53e3e;">
+    <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);font-weight:600;margin-bottom:0.4rem;">YOU OWE</div>
+    <div style="font-size:1.8rem;font-weight:800;color:#e53e3e;line-height:1;">₹{{ '%.2f'|format(total_owe) }}</div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.3rem;">Total you owe others</div>
+  </div>
+  <div class="glass-card" style="text-align:center;padding:1.25rem 1rem;border-left:4px solid #38a169;">
+    <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);font-weight:600;margin-bottom:0.4rem;">YOU ARE OWED</div>
+    <div style="font-size:1.8rem;font-weight:800;color:#38a169;line-height:1;">₹{{ '%.2f'|format(total_owed) }}</div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.3rem;">Total owed to you</div>
   </div>
 </div>
 
-<!-- ── Balance Summary (Khatabook style) ──────────────────────── -->
-{% set total_give = namespace(val=0) %}
-{% set total_get  = namespace(val=0) %}
-{% for s in settlements %}
-  {% if s.from_user == session.user_id %}
-    {% set total_give.val = total_give.val + s.amount %}
-  {% elif s.to_user == session.user_id %}
-    {% set total_get.val = total_get.val + s.amount %}
-  {% endif %}
-{% endfor %}
+<!-- ── Net Balances List ─────────────────────────────────────── -->
+<div class="glass-card" style="margin-bottom:1.5rem;padding:0;">
+  <div style="padding:1rem 1.25rem 0.75rem;border-bottom:1px solid var(--border-warm);">
+    <h3 style="margin:0;font-size:1rem;font-weight:700;">⚖️ Balances with Members</h3>
+  </div>
 
-<div class="balance-summary">
-  <div class="balance-card">
-    <div class="balance-card-label">You Will Give</div>
-    <div class="balance-card-amount give">₹{{ '%.2f'|format(total_give.val) }}</div>
-    <div class="balance-card-sub">Total you owe others</div>
-  </div>
-  <div class="balance-card">
-    <div class="balance-card-label">You Will Get</div>
-    <div class="balance-card-amount get">₹{{ '%.2f'|format(total_get.val) }}</div>
-    <div class="balance-card-sub">Total owed to you</div>
-  </div>
-</div>
+  {% if member_balances %}
+    {% for mb in member_balances %}
+    <div class="expense-member-row"
+         onclick="openHistoryModal({{ mb.user_id }}, '{{ mb.username|e }}', {{ space.space_id }})"
+         style="display:flex;align-items:center;gap:1rem;padding:0.9rem 1.25rem;cursor:pointer;border-bottom:1px solid var(--border-warm);transition:background 0.15s;"
+         onmouseover="this.style.background='rgba(252,108,38,0.06)'"
+         onmouseout="this.style.background=''">
 
-<!-- ── Member Balances ─────────────────────────────────────────── -->
-{% if settlements %}
-<div class="glass-card mb-4">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-    <h3>⚖ Settlement Balances</h3>
-  </div>
-  <div class="member-balance-list">
-    {% for s in settlements %}
-    <div class="member-balance-card" id="settle-{{ s.settlement_id }}">
-      <div class="member-balance-avatar">
-        {{ s.from_name[0].upper() }}
+      <!-- Avatar -->
+      <div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;
+                  {% if mb.status == 'owe' %}background:#ffe5e5;color:#c53030;
+                  {% elif mb.status == 'owed' %}background:#e6ffed;color:#276749;
+                  {% else %}background:#f0f0f0;color:#718096;{% endif %}">
+        {{ mb.username[0].upper() }}
       </div>
-      <div class="member-balance-info">
-        <div class="member-balance-name">{{ s.from_name }}</div>
-        <div class="member-balance-sub">owes → {{ s.to_name }}</div>
+
+      <!-- Name & sub -->
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:0.95rem;color:var(--text-dark);">{{ mb.username }}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);">
+          {% if mb.status == 'owe' %}You owe this person
+          {% elif mb.status == 'owed' %}This person owes you
+          {% else %}All settled up
+          {% endif %}
+        </div>
       </div>
-      <div class="member-balance-amount {% if s.from_user == session.user_id %}owe{% elif s.to_user == session.user_id %}owed{% else %}owe{% endif %}">
-        ₹{{ '%.2f'|format(s.amount) }}
+
+      <!-- Net amount -->
+      <div style="text-align:right;flex-shrink:0;">
+        {% if mb.status == 'owe' %}
+          <div style="font-weight:700;font-size:1.05rem;color:#e53e3e;">−₹{{ '%.2f'|format(mb.net|abs) }}</div>
+          <div style="font-size:0.73rem;color:#e53e3e;">you owe</div>
+        {% elif mb.status == 'owed' %}
+          <div style="font-weight:700;font-size:1.05rem;color:#38a169;">+₹{{ '%.2f'|format(mb.net) }}</div>
+          <div style="font-size:0.73rem;color:#38a169;">gets back</div>
+        {% else %}
+          <div style="font-weight:600;font-size:1rem;color:#718096;">₹0.00</div>
+          <div style="font-size:0.73rem;color:#718096;">settled</div>
+        {% endif %}
       </div>
-      {% if s.from_user == session.user_id %}
-        <button class="btn btn-success btn-sm" onclick="markSettlementPaid({{ s.settlement_id }}, this, {{ space.space_id }})">✓ Paid</button>
-      {% endif %}
+
+      <!-- Chevron -->
+      <div style="color:var(--text-muted);font-size:0.9rem;">›</div>
     </div>
     {% endfor %}
-  </div>
-</div>
-{% endif %}
-
-<!-- ── Simplified Add Expense Panel ──────────────────────────── -->
-<div class="add-expense-panel mb-4">
-  <h3 style="margin-bottom:1.1rem;font-size:1.05rem;">＋ Add New Expense</h3>
-  <form id="inline-expense-form" onsubmit="submitInlineExpense(event, {{ space.space_id }})">
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-      <div class="form-group" style="margin-bottom:0;">
-        <label>Amount (₹)</label>
-        <input type="number" id="exp-amount" class="form-control" step="0.01" min="0.01"
-               placeholder="500.00" required oninput="updateSplitPreview()" />
-      </div>
-      <div class="form-group" style="margin-bottom:0;">
-        <label>Description</label>
-        <input type="text" id="exp-desc" class="form-control" placeholder="e.g. Hotel booking" required />
-      </div>
-    </div>
-
-    <div class="form-group" style="margin-top:1rem;">
-      <label>Paid By</label>
-      <select id="exp-paidby" class="form-control">
-        {% for m in members %}
-          <option value="{{ m.user_id }}" {% if m.user_id == session.user_id %}selected{% endif %}>{{ m.username }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>Split Among <span style="font-size:0.75rem;text-transform:none;font-weight:400;color:var(--text-muted);">(select members)</span></label>
-      <div class="member-checkbox-list" id="member-checkbox-list">
-        {% for m in members %}
-        <div class="member-checkbox-item">
-          <input type="checkbox" id="chk-{{ m.user_id }}" value="{{ m.user_id }}"
-                 class="expense-member-chk" checked onchange="updateSplitPreview()" />
-          <label for="chk-{{ m.user_id }}">{{ m.username }}</label>
-          <span class="member-share-tag" id="share-tag-{{ m.user_id }}">₹0</span>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-
-    <!-- Split Preview -->
-    <div class="expense-split-preview" id="split-preview">
-      Enter an amount above to see equal split per member.
-    </div>
-
-    <button type="submit" class="btn btn-primary btn-full mt-4" id="inline-submit-btn">
-      ＋ Add Expense
-    </button>
-  </form>
-</div>
-
-<!-- ── All Expenses List ──────────────────────────────────────── -->
-<div class="glass-card">
-  <h3 style="margin-bottom:1rem;">🧾 All Expenses</h3>
-  {% if expenses %}
-    <div class="expense-list">
-      {% for e in expenses %}
-        <div class="expense-item">
-          <div>
-            <div style="font-weight:600;color:var(--text-color);">{{ e.description }}</div>
-            <div class="expense-meta">Paid by <strong>{{ e.payer }}</strong> · {{ e.created_at.strftime('%d %b %Y') if e.created_at else '' }}</div>
-          </div>
-          <div class="expense-amount">₹{{ '%.2f'|format(e.amount) }}</div>
-        </div>
-      {% endfor %}
-    </div>
   {% else %}
-    <div class="empty-state" style="padding:2rem;">
-      <span class="empty-icon">🧾</span>
-      <p>No expenses yet. Add the first one above!</p>
+    <div style="padding:2.5rem;text-align:center;color:var(--text-muted);">
+      <div style="font-size:2rem;margin-bottom:0.5rem;">🎉</div>
+      <p>No members to show yet — add an expense to get started!</p>
     </div>
   {% endif %}
 </div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MODAL 1: Add Expense                                        -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="add-expense-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);overflow-y:auto;">
+  <div style="margin:2rem auto;max-width:500px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.2);overflow:hidden;">
+
+    <!-- Modal Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;border-bottom:1px solid var(--border-warm);">
+      <h3 style="margin:0;font-size:1.1rem;font-weight:700;">＋ Add Expense</h3>
+      <button onclick="closeAddExpenseModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);line-height:1;">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <form id="add-expense-form" onsubmit="submitExpenseModal(event, {{ space.space_id }})" style="padding:1.4rem;display:flex;flex-direction:column;gap:1.1rem;">
+
+      <!-- Description -->
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Description</label>
+        <input type="text" id="modal-desc" class="form-control" placeholder="e.g. Dinner, Groceries, Hotel" required style="margin-top:0.4rem;" />
+      </div>
+
+      <!-- Amount -->
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Amount (₹)</label>
+        <input type="number" id="modal-amount" class="form-control" step="0.01" min="0.01" placeholder="0.00" required oninput="modalUpdateSplit()" style="margin-top:0.4rem;font-size:1.2rem;font-weight:700;" />
+      </div>
+
+      <!-- Paid By -->
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Paid By</label>
+        <select id="modal-paidby" class="form-control" style="margin-top:0.4rem;">
+          {% for m in members %}
+          <option value="{{ m.user_id }}" {% if m.user_id == session.user_id %}selected{% endif %}>{{ m.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Split Among -->
+      <div class="form-group" style="margin:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin:0;">Split Among</label>
+          <button type="button" onclick="toggleSelectAll()" id="select-all-btn"
+                  style="background:none;border:1px solid var(--border-warm);border-radius:6px;padding:0.2rem 0.6rem;font-size:0.73rem;cursor:pointer;color:var(--text-muted);">
+            Deselect All
+          </button>
+        </div>
+        <div style="background:var(--bg-main);border:1px solid var(--border-warm);border-radius:10px;overflow:hidden;">
+          {% for m in members %}
+          <label for="modal-chk-{{ m.user_id }}"
+                 style="display:flex;align-items:center;gap:0.75rem;padding:0.65rem 1rem;cursor:pointer;border-bottom:{% if not loop.last %}1px solid var(--border-warm){% else %}none{% endif %};">
+            <input type="checkbox" id="modal-chk-{{ m.user_id }}" value="{{ m.user_id }}"
+                   class="modal-member-chk" checked onchange="modalUpdateSplit()"
+                   style="width:16px;height:16px;accent-color:var(--accent-orange);" />
+            <span style="flex:1;font-weight:500;font-size:0.9rem;">{{ m.username }}
+              {% if m.user_id == session.user_id %}<span style="font-size:0.72rem;color:var(--text-muted);">(you)</span>{% endif %}
+            </span>
+            <span class="modal-share-tag" id="modal-share-{{ m.user_id }}"
+                  style="font-size:0.82rem;font-weight:600;color:var(--accent-orange);min-width:55px;text-align:right;">₹0</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Live Split Preview -->
+      <div id="modal-split-preview"
+           style="background:rgba(252,108,38,0.08);border:1px solid rgba(252,108,38,0.3);border-radius:8px;padding:0.65rem 1rem;font-size:0.85rem;color:var(--text-dark);text-align:center;">
+        Enter amount to see split preview
+      </div>
+
+      <!-- Submit -->
+      <button type="submit" id="modal-submit-btn" class="btn btn-primary"
+              style="width:100%;font-weight:700;font-size:1rem;padding:0.75rem;">
+        Save Expense
+      </button>
+    </form>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MODAL 2: Transaction History (A ↔ B)                       -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="history-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);overflow-y:auto;">
+  <div style="margin:2rem auto;max-width:540px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.2);overflow:hidden;">
+
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;border-bottom:1px solid var(--border-warm);">
+      <div>
+        <h3 id="history-modal-title" style="margin:0;font-size:1rem;font-weight:700;">Transaction History</h3>
+        <div id="history-net-label" style="font-size:0.82rem;margin-top:0.2rem;"></div>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <button id="settle-up-btn" onclick="doSettleUp()"
+                style="background:#38a169;color:#fff;border:none;border-radius:8px;padding:0.4rem 0.9rem;font-size:0.82rem;font-weight:600;cursor:pointer;display:none;">
+          ✓ Settle Up
+        </button>
+        <button onclick="closeHistoryModal()"
+                style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);line-height:1;">✕</button>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div id="history-modal-body" style="padding:0;max-height:70vh;overflow-y:auto;">
+      <div style="padding:2rem;text-align:center;color:var(--text-muted);">
+        <div style="font-size:1.5rem;">⏳</div>
+        <p>Loading…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 {% endblock %}
+
 
 {% block scripts %}
 <script>
-// ── Live Equal-Split Preview ─────────────────────────────────
-function updateSplitPreview() {
-  const amount   = parseFloat(document.getElementById('exp-amount').value) || 0;
-  const checked  = Array.from(document.querySelectorAll('.expense-member-chk:checked'));
-  const count    = checked.length;
-  const preview  = document.getElementById('split-preview');
+const SPACE_ID = {{ space.space_id }};
+let _historyOtherUid = null;
 
-  // Reset all share tags first
-  document.querySelectorAll('.member-share-tag').forEach(t => t.textContent = '₹0');
+// ── Helpers ───────────────────────────────────────────────────
+function fmt(n) { return '₹' + Math.abs(parseFloat(n)).toFixed(2); }
 
-  if (amount <= 0 || count === 0) {
-    preview.innerHTML = 'Enter an amount above to see equal split per member.';
+// ── Add Expense Modal ─────────────────────────────────────────
+function openAddExpenseModal() {
+  document.getElementById('add-expense-modal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  modalUpdateSplit();
+}
+function closeAddExpenseModal() {
+  document.getElementById('add-expense-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// Close on backdrop click
+document.getElementById('add-expense-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAddExpenseModal();
+});
+
+// Select All / Deselect All
+let _allSelected = true;
+function toggleSelectAll() {
+  _allSelected = !_allSelected;
+  document.querySelectorAll('.modal-member-chk').forEach(c => { c.checked = _allSelected; });
+  document.getElementById('select-all-btn').textContent = _allSelected ? 'Deselect All' : 'Select All';
+  modalUpdateSplit();
+}
+
+// Live split preview
+function modalUpdateSplit() {
+  const amount  = parseFloat(document.getElementById('modal-amount').value) || 0;
+  const checked = Array.from(document.querySelectorAll('.modal-member-chk:checked'));
+  const n       = checked.length;
+  const preview = document.getElementById('modal-split-preview');
+
+  // Reset all share tags
+  document.querySelectorAll('.modal-share-tag').forEach(t => t.textContent = '₹0');
+
+  if (amount <= 0 || n === 0) {
+    preview.textContent = 'Enter amount to see split preview';
     return;
   }
 
-  const share = (amount / count).toFixed(2);
+  const share = (amount / n).toFixed(2);
   checked.forEach(chk => {
-    const tag = document.getElementById('share-tag-' + chk.value);
+    const tag = document.getElementById('modal-share-' + chk.value);
     if (tag) tag.textContent = '₹' + share;
   });
 
-  preview.innerHTML = `<strong>₹${share}</strong> each &nbsp;·&nbsp; ${count} member${count !== 1 ? 's' : ''} &nbsp;·&nbsp; Total ₹${amount.toFixed(2)}`;
+  preview.innerHTML = `<strong>₹${share}</strong> each &nbsp;·&nbsp; ${n} member${n !== 1 ? 's' : ''} &nbsp;·&nbsp; Total ₹${amount.toFixed(2)}`;
 }
 
-// ── Submit Inline Expense ─────────────────────────────────────
-async function submitInlineExpense(event, spaceId) {
+// Submit Add Expense
+async function submitExpenseModal(event, spaceId) {
   event.preventDefault();
-  const btn = document.getElementById('inline-submit-btn');
-
+  const btn  = document.getElementById('modal-submit-btn');
   if (btn.disabled) return;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Saving…';
+  btn.textContent = 'Saving…';
 
-  const desc   = document.getElementById('exp-desc').value.trim();
-  const amount = parseFloat(document.getElementById('exp-amount').value);
-  const paidBy = parseInt(document.getElementById('exp-paidby').value);
+  const desc   = document.getElementById('modal-desc').value.trim();
+  const amount = parseFloat(document.getElementById('modal-amount').value);
+  const paidBy = parseInt(document.getElementById('modal-paidby').value);
 
   if (!desc || isNaN(amount) || amount <= 0) {
     showFlash('Please enter a valid description and amount.', 'danger');
-    btn.disabled = false;
-    btn.innerHTML = '＋ Add Expense';
-    return;
+    btn.disabled = false; btn.textContent = 'Save Expense'; return;
   }
 
-  const checked = Array.from(document.querySelectorAll('.expense-member-chk:checked'));
+  const checked = Array.from(document.querySelectorAll('.modal-member-chk:checked'));
   if (checked.length === 0) {
-    showFlash('Please select at least one member to split with.', 'danger');
-    btn.disabled = false;
-    btn.innerHTML = '＋ Add Expense';
-    return;
+    showFlash('Select at least one member to split with.', 'danger');
+    btn.disabled = false; btn.textContent = 'Save Expense'; return;
   }
 
-  // Build manual splits based on checked members (equal division)
-  const share = parseFloat((amount / checked.length).toFixed(2));
+  const n = checked.length;
+  const baseShare = parseFloat((amount / n).toFixed(2));
   const splits = {};
   checked.forEach((chk, i) => {
-    // Last member absorbs rounding remainder
-    if (i === checked.length - 1) {
-      const alreadyAssigned = share * (checked.length - 1);
-      splits[chk.value] = parseFloat((amount - alreadyAssigned).toFixed(2));
-    } else {
-      splits[chk.value] = share;
-    }
+    splits[chk.value] = i === n - 1
+      ? parseFloat((amount - baseShare * (n - 1)).toFixed(2))
+      : baseShare;
   });
-
-  const payload = {
-    description: desc,
-    amount,
-    paid_by: paidBy,
-    split_type: 'manual',
-    splits
-  };
 
   try {
     const res  = await fetch(`/spaces/${spaceId}/expenses/add`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload)
+      body: JSON.stringify({ description: desc, amount, paid_by: paidBy, split_type: 'manual', splits })
     });
     const data = await res.json();
-    if (data.error) {
-      showFlash(data.error, 'danger');
-      return;
-    }
+    if (data.error) { showFlash(data.error, 'danger'); return; }
     showFlash('Expense added! 🎉', 'success');
-    window.location.reload();
+    setTimeout(() => window.location.reload(), 600);
+  } catch (err) {
+    showFlash('Network error: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Expense';
+  }
+}
+
+
+// ── History Modal ─────────────────────────────────────────────
+async function openHistoryModal(otherUid, otherName, spaceId) {
+  _historyOtherUid = otherUid;
+  document.getElementById('history-modal-title').textContent = `History with ${otherName}`;
+  document.getElementById('history-net-label').textContent = '';
+  document.getElementById('settle-up-btn').style.display = 'none';
+  document.getElementById('history-modal-body').innerHTML = `
+    <div style="padding:2rem;text-align:center;color:var(--text-muted);">
+      <div style="font-size:1.5rem;margin-bottom:0.5rem;">⏳</div><p>Loading…</p>
+    </div>`;
+  document.getElementById('history-modal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+
+  try {
+    const res  = await fetch(`/spaces/${spaceId}/expenses/history/${otherUid}`);
+    const data = await res.json();
+    renderHistoryModal(data);
+  } catch (err) {
+    document.getElementById('history-modal-body').innerHTML =
+      `<div style="padding:2rem;text-align:center;color:#e53e3e;">Failed to load: ${err.message}</div>`;
+  }
+}
+
+function renderHistoryModal(data) {
+  const net        = parseFloat(data.net);
+  const netLabel   = document.getElementById('history-net-label');
+  const settleBtn  = document.getElementById('settle-up-btn');
+
+  // Net label & settle button
+  if (Math.abs(net) < 0.01) {
+    netLabel.innerHTML = `<span style="color:#718096;font-weight:600;">All settled up ✓</span>`;
+    settleBtn.style.display = 'none';
+  } else if (net > 0) {
+    netLabel.innerHTML = `<span style="color:#38a169;font-weight:600;">${data.other_user.username} owes you ${fmt(net)}</span>`;
+    settleBtn.style.display = 'inline-block';
+    settleBtn.textContent = '✓ Settle Up';
+  } else {
+    netLabel.innerHTML = `<span style="color:#e53e3e;font-weight:600;">You owe ${data.other_user.username} ${fmt(net)}</span>`;
+    settleBtn.style.display = 'inline-block';
+    settleBtn.textContent = '✓ Settle Up';
+  }
+
+  const body = document.getElementById('history-modal-body');
+
+  if (!data.history || data.history.length === 0) {
+    body.innerHTML = `
+      <div style="padding:2.5rem;text-align:center;color:var(--text-muted);">
+        <div style="font-size:2rem;margin-bottom:0.5rem;">🧾</div>
+        <p>No shared expenses yet between you two.</p>
+      </div>`;
+    return;
+  }
+
+  const items = data.history.map(e => {
+    const isPayer  = e.role === 'you_paid';
+    const amt      = e.your_amount.toFixed(2);
+    const color    = isPayer ? '#38a169' : '#e53e3e';
+    const label    = isPayer
+      ? `You lent ₹${amt} to ${data.other_user.username}`
+      : `You borrowed ₹${amt} from ${data.other_user.username}`;
+    const arrow    = isPayer ? '↑' : '↓';
+
+    return `
+      <div style="display:flex;align-items:flex-start;gap:0.9rem;padding:0.9rem 1.25rem;border-bottom:1px solid var(--border-warm);">
+        <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;flex-shrink:0;
+                    background:${isPayer ? '#e6ffed' : '#ffe5e5'};color:${color};">${arrow}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:0.9rem;color:var(--text-dark);">${e.description}</div>
+          <div style="font-size:0.77rem;color:var(--text-muted);margin-top:0.15rem;">
+            ${e.payer_name} paid ₹${parseFloat(e.total_amount).toFixed(2)} · ${e.date}
+          </div>
+          <div style="font-size:0.8rem;font-weight:600;color:${color};margin-top:0.2rem;">${label}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = items;
+}
+
+function closeHistoryModal() {
+  document.getElementById('history-modal').style.display = 'none';
+  document.body.style.overflow = '';
+  _historyOtherUid = null;
+}
+
+document.getElementById('history-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeHistoryModal();
+});
+
+// ── Settle Up ─────────────────────────────────────────────────
+async function doSettleUp() {
+  if (!_historyOtherUid) return;
+  const btn = document.getElementById('settle-up-btn');
+  btn.disabled = true; btn.textContent = 'Settling…';
+
+  try {
+    const res  = await fetch(`/spaces/${SPACE_ID}/expenses/settle-up/${_historyOtherUid}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.error) { showFlash(data.error, 'danger'); return; }
+    showFlash('Settled up! 🎉', 'success');
+    closeHistoryModal();
+    setTimeout(() => window.location.reload(), 700);
   } catch (err) {
     showFlash('Network error: ' + err.message, 'danger');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '＋ Add Expense';
   }
 }
-
-// Initialize preview on load
-document.addEventListener('DOMContentLoaded', updateSplitPreview);
 </script>
 {% endblock %}
