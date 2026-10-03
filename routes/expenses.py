@@ -329,46 +329,330 @@ def add_expense(space_id):
 
 
 # ──────────────────────────────────────────────────────────────
-# POST /spaces/<id>/expenses/settle-up/<other_uid>
-#      "Settle Up" action — marks net balance as 0 by inserting
-#      a settlement record and a counter-expense split record.
+# Core Settlement & Expense Modification Handlers
 # ──────────────────────────────────────────────────────────────
+
+def process_settle_up(target_user_id: int, space_id: int = None):
+    me = session.get("user_id")
+    if not me:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not target_user_id or int(target_user_id) == me:
+        return jsonify({"error": "Invalid target user."}), 400
+
+    target_user_id = int(target_user_id)
+
+    if not space_id:
+        shared = db.run_query(
+            """SELECT sm1.space_id FROM space_members sm1
+               JOIN space_members sm2 ON sm1.space_id = sm2.space_id
+               WHERE sm1.user_id = %s AND sm2.user_id = %s
+               LIMIT 1""",
+            (me, target_user_id),
+            fetch="one", action_label="SETTLE_FIND_SPACE"
+        )
+        if not shared:
+            return jsonify({"error": "No shared space found with target user."}), 400
+        space_id = shared["space_id"]
+    else:
+        space_id = int(space_id)
+        mem = db.run_query(
+            "SELECT 1 FROM space_members WHERE space_id=%s AND user_id=%s",
+            (space_id, me), fetch="one", action_label="SETTLE_CHECK_MEM"
+        )
+        if not mem:
+            return jsonify({"error": "You are not a member of this space."}), 403
+
+    balances = _compute_pairwise_balances(space_id, me)
+    net = round(balances.get(target_user_id, 0.0), 2)
+
+    if abs(net) < 0.01:
+        return jsonify({
+            "success": True,
+            "message": "Already settled up.",
+            "net": 0.0,
+            "status": "settled",
+            "reload": True
+        })
+
+    target_user = db.run_query(
+        "SELECT username FROM users WHERE user_id=%s",
+        (target_user_id,), fetch="one", action_label="SETTLE_TARGET_USER"
+    )
+    target_name = target_user["username"] if target_user else f"User#{target_user_id}"
+
+    abs_net = float(round(Decimal(str(abs(net))), 2))
+
+    if net > 0:
+        # Target user owes current user money. Target user pays current user.
+        payer = target_user_id
+        recipient = me
+    else:
+        # Current user owes target user money. Current user pays target user.
+        payer = me
+        recipient = target_user_id
+
+    desc = f"Settlement with {target_name}"
+
+    conn = get_connection()
+    try:
+        conn.start_transaction()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute(
+            """INSERT INTO expenses (space_id, description, amount, paid_by, created_by)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (space_id, desc, abs_net, payer, me)
+        )
+        expense_id = cursor.lastrowid
+
+        # Insert pairwise settlement splits
+        cursor.execute(
+            """INSERT INTO expense_splits (expense_id, user_id, share_amount)
+               VALUES (%s, %s, %s)""",
+            (expense_id, payer, 0.00)
+        )
+        cursor.execute(
+            """INSERT INTO expense_splits (expense_id, user_id, share_amount)
+               VALUES (%s, %s, %s)""",
+            (expense_id, recipient, abs_net)
+        )
+
+        conn.commit()
+        cursor.close()
+
+        # Recalculate net balance
+        new_balances = _compute_pairwise_balances(space_id, me)
+        new_net = round(new_balances.get(target_user_id, 0.0), 2)
+
+        return jsonify({
+            "success": True,
+            "message": f"Settled up with {target_name} successfully!",
+            "net": new_net,
+            "status": "settled",
+            "expense_id": expense_id,
+            "reload": True
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+def process_delete_expense(expense_id: int):
+    me = session.get("user_id")
+    if not me:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    exp = db.run_query(
+        "SELECT expense_id, space_id, paid_by, created_by FROM expenses WHERE expense_id = %s",
+        (expense_id,), fetch="one", action_label="EXPENSE_FETCH_DEL"
+    )
+    if not exp:
+        return jsonify({"error": "Expense not found."}), 404
+
+    is_split_user = db.run_query(
+        "SELECT 1 FROM expense_splits WHERE expense_id = %s AND user_id = %s",
+        (expense_id, me), fetch="one", action_label="EXPENSE_CHECK_SPLIT_DEL"
+    )
+
+    is_participant = (
+        exp["paid_by"] == me or 
+        exp["created_by"] == me or 
+        bool(is_split_user)
+    )
+
+    if not is_participant:
+        return jsonify({"error": "Unauthorized. Only participants in this expense can delete it."}), 403
+
+    conn = get_connection()
+    try:
+        conn.start_transaction()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("DELETE FROM expense_splits WHERE expense_id = %s", (expense_id,))
+        cursor.execute("DELETE FROM expenses WHERE expense_id = %s", (expense_id,))
+
+        conn.commit()
+        cursor.close()
+
+        return jsonify({"success": True, "message": "Expense deleted successfully.", "reload": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+def process_edit_expense(expense_id: int):
+    me = session.get("user_id")
+    if not me:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    exp = db.run_query(
+        "SELECT expense_id, space_id, description, amount, paid_by, created_by FROM expenses WHERE expense_id = %s",
+        (expense_id,), fetch="one", action_label="EXPENSE_FETCH_EDIT"
+    )
+    if not exp:
+        return jsonify({"error": "Expense not found."}), 404
+
+    is_split_user = db.run_query(
+        "SELECT 1 FROM expense_splits WHERE expense_id = %s AND user_id = %s",
+        (expense_id, me), fetch="one", action_label="EXPENSE_CHECK_SPLIT_EDIT"
+    )
+
+    is_participant = (
+        exp["paid_by"] == me or 
+        exp["created_by"] == me or 
+        bool(is_split_user)
+    )
+
+    if not is_participant:
+        return jsonify({"error": "Unauthorized. Only participants in this expense can edit it."}), 403
+
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    new_desc = (data.get("description") or "").strip()
+    amount_val = data.get("amount")
+
+    if not new_desc:
+        return jsonify({"error": "Description is required."}), 400
+
+    try:
+        new_amount = round(float(amount_val), 2)
+        if new_amount <= 0:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify({"error": "Valid positive amount is required."}), 400
+
+    new_paid_by = data.get("paid_by")
+    if new_paid_by:
+        try:
+            new_paid_by = int(new_paid_by)
+        except (ValueError, TypeError):
+            new_paid_by = exp["paid_by"]
+    else:
+        new_paid_by = exp["paid_by"]
+
+    manual_splits = data.get("splits")
+
+    conn = get_connection()
+    try:
+        conn.start_transaction()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute(
+            "UPDATE expenses SET description = %s, amount = %s, paid_by = %s WHERE expense_id = %s",
+            (new_desc, new_amount, new_paid_by, expense_id)
+        )
+
+        if manual_splits and isinstance(manual_splits, dict):
+            total_manual = sum(float(v) for v in manual_splits.values())
+            if abs(total_manual - new_amount) > 0.05:
+                conn.rollback()
+                cursor.close()
+                return jsonify({"error": f"Manual splits ({total_manual:.2f}) must equal amount ({new_amount:.2f})."}), 400
+
+            cursor.execute("DELETE FROM expense_splits WHERE expense_id = %s", (expense_id,))
+            for uid_str, share_val in manual_splits.items():
+                cursor.execute(
+                    "INSERT INTO expense_splits (expense_id, user_id, share_amount) VALUES (%s, %s, %s)",
+                    (expense_id, int(uid_str), round(float(share_val), 2))
+                )
+        else:
+            cursor.execute(
+                "SELECT user_id, share_amount FROM expense_splits WHERE expense_id = %s ORDER BY user_id",
+                (expense_id,)
+            )
+            old_splits = cursor.fetchall()
+            old_total = sum(float(s["share_amount"]) for s in old_splits)
+
+            if old_splits:
+                n = len(old_splits)
+                if old_total > 0 and abs(old_total - float(exp["amount"])) < 0.05:
+                    first_share = float(old_splits[0]["share_amount"])
+                    is_equal = all(abs(float(s["share_amount"]) - first_share) <= 0.02 for s in old_splits)
+
+                    if is_equal:
+                        base_share = round(new_amount / n, 2)
+                        for i, s in enumerate(old_splits):
+                            share = round(new_amount - base_share * (n - 1), 2) if i == n - 1 else base_share
+                            cursor.execute(
+                                "UPDATE expense_splits SET share_amount = %s WHERE expense_id = %s AND user_id = %s",
+                                (share, expense_id, s["user_id"])
+                            )
+                    else:
+                        running_sum = 0.0
+                        for i, s in enumerate(old_splits):
+                            if i == n - 1:
+                                share = round(new_amount - running_sum, 2)
+                            else:
+                                ratio = float(s["share_amount"]) / old_total
+                                share = round(new_amount * ratio, 2)
+                                running_sum += share
+                            cursor.execute(
+                                "UPDATE expense_splits SET share_amount = %s WHERE expense_id = %s AND user_id = %s",
+                                (share, expense_id, s["user_id"])
+                            )
+                else:
+                    base_share = round(new_amount / n, 2)
+                    for i, s in enumerate(old_splits):
+                        share = round(new_amount - base_share * (n - 1), 2) if i == n - 1 else base_share
+                        cursor.execute(
+                            "UPDATE expense_splits SET share_amount = %s WHERE expense_id = %s AND user_id = %s",
+                            (share, expense_id, s["user_id"])
+                        )
+
+        conn.commit()
+        cursor.close()
+
+        return jsonify({"success": True, "message": "Expense updated successfully.", "reload": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Blueprint Routes ──────────────────────────────────────────
+
+@expenses_bp.route("/settle-up", methods=["POST"])
+@login_required
+@space_member_required
+def settle_up_space(space_id):
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    target_user_id = data.get("target_user_id") or request.args.get("target_user_id")
+    return process_settle_up(target_user_id, space_id)
+
+
 @expenses_bp.route("/settle-up/<int:other_uid>", methods=["POST"])
 @login_required
 @space_member_required
-def settle_up(space_id, other_uid):
-    me = session["user_id"]
+def settle_up_legacy(space_id, other_uid):
+    return process_settle_up(other_uid, space_id)
 
-    balances = _compute_pairwise_balances(space_id, me)
-    net = round(balances.get(other_uid, 0.0), 2)
 
-    if abs(net) < 0.01:
-        return jsonify({"message": "Already settled.", "reload": True})
+@expenses_bp.route("/delete-expense/<int:expense_id>", methods=["POST", "DELETE"])
+@login_required
+@space_member_required
+def delete_expense_space(space_id, expense_id):
+    return process_delete_expense(expense_id)
 
-    if net > 0:
-        # They owe me — I'm forgiving (or they paid me back)
-        from_user, to_user, amount = other_uid, me, net
-    else:
-        # I owe them — I'm paying
-        from_user, to_user, amount = me, other_uid, abs(net)
 
-    # Mark any existing unsettled settlements between these two as settled
-    db.run_query(
-        """UPDATE settlements SET is_settled=TRUE, settled_at=NOW()
-           WHERE space_id=%s AND (
-             (from_user=%s AND to_user=%s) OR (from_user=%s AND to_user=%s)
-           ) AND is_settled=FALSE""",
-        (space_id, from_user, to_user, to_user, from_user),
-        fetch="none", action_label="SETTLE_UP_MARK"
-    )
+@expenses_bp.route("/edit-expense/<int:expense_id>", methods=["POST"])
+@login_required
+@space_member_required
+def edit_expense_space(space_id, expense_id):
+    return process_edit_expense(expense_id)
 
-    # Insert a fresh settled settlement so the history is clean
-    db.run_query(
-        """INSERT INTO settlements (space_id, from_user, to_user, amount, is_settled, settled_at)
-           VALUES (%s,%s,%s,%s,TRUE,NOW())""",
-        (space_id, from_user, to_user, amount),
-        fetch="none", action_label="SETTLE_UP_INSERT"
-    )
-    db.commit()
 
-    return jsonify({"message": "Settled up successfully.", "reload": True})
+# ── Direct Endpoints (for root URL mapping) ───────────────────
+
+def settle_up_endpoint():
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    target_user_id = data.get("target_user_id") or request.args.get("target_user_id")
+    space_id = data.get("space_id") or request.args.get("space_id")
+    return process_settle_up(target_user_id, space_id)
+
+
+def delete_expense_endpoint(expense_id: int):
+    return process_delete_expense(expense_id)
+
+
+def edit_expense_endpoint(expense_id: int):
+    return process_edit_expense(expense_id)
+

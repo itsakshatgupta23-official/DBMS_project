@@ -188,6 +188,22 @@ def create_app():
             notif_count=notif_count["cnt"] if notif_count else 0,
         )
 
+    # ── Expense Root Action Routes ────────────────────────────
+    @app.route("/settle-up", methods=["POST"])
+    def app_settle_up():
+        from routes.expenses import settle_up_endpoint
+        return settle_up_endpoint()
+
+    @app.route("/delete-expense/<int:expense_id>", methods=["POST", "DELETE"])
+    def app_delete_expense(expense_id):
+        from routes.expenses import delete_expense_endpoint
+        return delete_expense_endpoint(expense_id)
+
+    @app.route("/edit-expense/<int:expense_id>", methods=["POST"])
+    def app_edit_expense(expense_id):
+        from routes.expenses import edit_expense_endpoint
+        return edit_expense_endpoint(expense_id)
+
     # ── Error handlers ────────────────────────────────────────
     @app.errorhandler(403)
     def forbidden(e):

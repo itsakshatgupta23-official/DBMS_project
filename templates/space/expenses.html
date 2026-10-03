@@ -170,31 +170,140 @@
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- MODAL 2: Transaction History (A ↔ B)                       -->
 <!-- ═══════════════════════════════════════════════════════════ -->
-<div id="history-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);overflow-y:auto;">
-  <div style="margin:2rem auto;max-width:540px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.2);overflow:hidden;">
+<div id="history-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);overflow-y:auto;">
+  <div style="margin:2rem auto;max-width:560px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.25);border:1px solid var(--border-warm);overflow:hidden;">
 
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;border-bottom:1px solid var(--border-warm);">
       <div>
-        <h3 id="history-modal-title" style="margin:0;font-size:1rem;font-weight:700;">Transaction History</h3>
-        <div id="history-net-label" style="font-size:0.82rem;margin-top:0.2rem;"></div>
+        <h3 id="history-modal-title" style="margin:0;font-size:1.1rem;font-weight:700;">Transaction History</h3>
+        <div id="history-net-label" style="font-size:0.85rem;margin-top:0.25rem;"></div>
       </div>
-      <div style="display:flex;gap:0.5rem;align-items:center;">
-        <button id="settle-up-btn" onclick="doSettleUp()"
-                style="background:#38a169;color:#fff;border:none;border-radius:8px;padding:0.4rem 0.9rem;font-size:0.82rem;font-weight:600;cursor:pointer;display:none;">
-          ✓ Settle Up
-        </button>
-        <button onclick="closeHistoryModal()"
-                style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);line-height:1;">✕</button>
-      </div>
+      <button onclick="closeHistoryModal()"
+              style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);line-height:1;padding:0.2rem 0.5rem;">✕</button>
     </div>
 
-    <!-- Body -->
-    <div id="history-modal-body" style="padding:0;max-height:70vh;overflow-y:auto;">
+    <!-- Prominent Action Bar Inside History Modal -->
+    <div style="padding:0.75rem 1.4rem;background:var(--bg-main);border-bottom:1px solid var(--border-warm);display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;">
+      <button id="quick-expense-trigger-btn" type="button" onclick="openQuickExpenseModal()" class="btn btn-primary"
+              style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;font-weight:600;padding:0.45rem 0.95rem;border-radius:8px;">
+        <span style="font-size:1.1rem;line-height:1;">＋</span> Add Expense with <span id="quick-expense-member-name">Member</span>
+      </button>
+      <button id="settle-up-btn" type="button" onclick="doSettleUp()"
+              style="background:#38a169;color:#fff;border:none;border-radius:8px;padding:0.45rem 1rem;font-size:0.85rem;font-weight:600;cursor:pointer;display:none;align-items:center;gap:0.35rem;transition:background 0.15s;"
+              onmouseover="this.style.background='#2f855a'"
+              onmouseout="this.style.background='#38a169'">
+        ✓ Settle Up
+      </button>
+    </div>
+
+    <!-- Body / History List -->
+    <div id="history-modal-body" style="padding:0;max-height:65vh;overflow-y:auto;">
       <div style="padding:2rem;text-align:center;color:var(--text-muted);">
-        <div style="font-size:1.5rem;">⏳</div>
+        <div style="font-size:1.5rem;margin-bottom:0.5rem;">⏳</div>
         <p>Loading…</p>
       </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MODAL 3: Direct 1-on-1 Quick Expense                        -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="quick-expense-modal" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);overflow-y:auto;">
+  <div style="margin:2.5rem auto;max-width:480px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid var(--border-warm);overflow:hidden;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;border-bottom:1px solid var(--border-warm);">
+      <h3 id="quick-modal-title" style="margin:0;font-size:1.1rem;font-weight:700;">＋ Add Expense with Member</h3>
+      <button onclick="closeQuickExpenseModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);line-height:1;">✕</button>
+    </div>
+    <form id="quick-expense-form" onsubmit="submitQuickExpense(event)" style="padding:1.4rem;display:flex;flex-direction:column;gap:1.1rem;">
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Description</label>
+        <input type="text" id="quick-desc" class="form-control" placeholder="e.g. Lunch, Coffee, Movie" required style="margin-top:0.4rem;" />
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Amount (₹)</label>
+        <input type="number" id="quick-amount" class="form-control" step="0.01" min="0.01" placeholder="0.00" required oninput="updateQuickSplitPreview()" style="margin-top:0.4rem;font-size:1.2rem;font-weight:700;" />
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Paid By</label>
+        <select id="quick-paidby" class="form-control" style="margin-top:0.4rem;">
+          <!-- Dynamically populated -->
+        </select>
+      </div>
+
+      <!-- Strict 50/50 Split Box -->
+      <div style="background:rgba(252,108,38,0.08);border:1px solid rgba(252,108,38,0.3);border-radius:10px;padding:0.8rem 1rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--accent-orange);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.25rem;">
+          🤝 Split (50/50 Equal)
+        </div>
+        <div id="quick-split-preview" style="font-size:0.88rem;color:var(--text-dark);font-weight:500;">
+          Split equally between you and <span id="quick-split-other-name">Member</span> (₹0.00 each)
+        </div>
+      </div>
+
+      <div style="display:flex;gap:0.75rem;margin-top:0.25rem;">
+        <button type="button" onclick="closeQuickExpenseModal()" class="btn" style="flex:1;background:var(--bg-main);border:1px solid var(--border-warm);color:var(--text-muted);font-weight:600;">Cancel</button>
+        <button type="submit" id="quick-submit-btn" class="btn btn-primary" style="flex:2;font-weight:700;">Save Expense</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MODAL 4: Edit Expense Modal                                 -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="edit-expense-modal" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);overflow-y:auto;">
+  <div style="margin:2.5rem auto;max-width:480px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid var(--border-warm);overflow:hidden;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;border-bottom:1px solid var(--border-warm);">
+      <h3 style="margin:0;font-size:1.1rem;font-weight:700;">✏️ Edit Expense</h3>
+      <button onclick="closeEditModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);line-height:1;">✕</button>
+    </div>
+    <form id="edit-expense-form" onsubmit="submitEditExpense(event)" style="padding:1.4rem;display:flex;flex-direction:column;gap:1.1rem;">
+      <input type="hidden" id="edit-expense-id" />
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Description</label>
+        <input type="text" id="edit-desc" class="form-control" required style="margin-top:0.4rem;" />
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Amount (₹)</label>
+        <input type="number" id="edit-amount" class="form-control" step="0.01" min="0.01" required style="margin-top:0.4rem;font-size:1.2rem;font-weight:700;" />
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Paid By</label>
+        <select id="edit-paidby" class="form-control" style="margin-top:0.4rem;">
+          {% for m in members %}
+          <option value="{{ m.user_id }}">{{ m.username }}{% if m.user_id == session.user_id %} (you){% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="font-size:0.78rem;color:var(--text-muted);background:var(--bg-main);padding:0.6rem 0.8rem;border-radius:8px;border:1px solid var(--border-warm);">
+        ℹ️ Adjusting the amount will automatically scale participant splits proportionally.
+      </div>
+      <div style="display:flex;gap:0.75rem;margin-top:0.25rem;">
+        <button type="button" onclick="closeEditModal()" class="btn" style="flex:1;background:var(--bg-main);border:1px solid var(--border-warm);color:var(--text-muted);font-weight:600;">Cancel</button>
+        <button type="submit" id="edit-submit-btn" class="btn btn-primary" style="flex:2;font-weight:700;">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MODAL 5: Delete Confirmation Modal                          -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="delete-expense-modal" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);overflow-y:auto;">
+  <div style="margin:4rem auto;max-width:420px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid var(--border-warm);overflow:hidden;padding:1.5rem;">
+    <div style="font-size:2rem;text-align:center;margin-bottom:0.5rem;">🗑️</div>
+    <h3 style="margin:0 0 0.5rem;text-align:center;font-size:1.15rem;font-weight:700;">Delete Expense?</h3>
+    <p style="text-align:center;color:var(--text-muted);font-size:0.9rem;margin-bottom:1.25rem;">
+      Are you sure you want to delete <b id="delete-desc-preview" style="color:var(--text-dark);"></b> (<span id="delete-amt-preview" style="font-weight:600;color:var(--text-dark);"></span>)? This will remove it from all balances.
+    </p>
+    <div style="display:flex;gap:0.75rem;">
+      <button type="button" onclick="closeDeleteModal()" class="btn" style="flex:1;background:var(--bg-main);border:1px solid var(--border-warm);color:var(--text-muted);font-weight:600;">Cancel</button>
+      <button type="button" id="delete-confirm-btn" onclick="executeDeleteExpense()" class="btn" style="flex:1;background:#e53e3e;color:#fff;font-weight:700;border:none;">Delete</button>
     </div>
   </div>
 </div>
@@ -206,10 +315,26 @@
 {% block scripts %}
 <script>
 const SPACE_ID = {{ space.space_id }};
+const CURRENT_USER_ID = {{ session.user_id }};
+const CURRENT_USER_NAME = "{{ session.username|e }}";
+
 let _historyOtherUid = null;
+let _historyOtherName = '';
+let _needsPageRefresh = false;
+let _deletingExpenseId = null;
 
 // ── Helpers ───────────────────────────────────────────────────
 function fmt(n) { return '₹' + Math.abs(parseFloat(n)).toFixed(2); }
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // ── Add Expense Modal ─────────────────────────────────────────
 function openAddExpenseModal() {
@@ -313,15 +438,30 @@ async function submitExpenseModal(event, spaceId) {
 // ── History Modal ─────────────────────────────────────────────
 async function openHistoryModal(otherUid, otherName, spaceId) {
   _historyOtherUid = otherUid;
+  _historyOtherName = otherName;
   document.getElementById('history-modal-title').textContent = `History with ${otherName}`;
   document.getElementById('history-net-label').textContent = '';
   document.getElementById('settle-up-btn').style.display = 'none';
+
+  const quickNameSpan = document.getElementById('quick-expense-member-name');
+  if (quickNameSpan) quickNameSpan.textContent = otherName;
+
   document.getElementById('history-modal-body').innerHTML = `
     <div style="padding:2rem;text-align:center;color:var(--text-muted);">
       <div style="font-size:1.5rem;margin-bottom:0.5rem;">⏳</div><p>Loading…</p>
     </div>`;
   document.getElementById('history-modal').style.display = 'block';
   document.body.style.overflow = 'hidden';
+
+  await loadHistoryData(otherUid, otherName, spaceId);
+}
+
+async function loadHistoryData(otherUid, otherName, spaceId) {
+  _historyOtherUid = otherUid;
+  if (otherName) _historyOtherName = otherName;
+  document.getElementById('history-modal-title').textContent = `History with ${_historyOtherName}`;
+  const quickNameSpan = document.getElementById('quick-expense-member-name');
+  if (quickNameSpan) quickNameSpan.textContent = _historyOtherName;
 
   try {
     const res  = await fetch(`/spaces/${spaceId}/expenses/history/${otherUid}`);
@@ -340,15 +480,15 @@ function renderHistoryModal(data) {
 
   // Net label & settle button
   if (Math.abs(net) < 0.01) {
-    netLabel.innerHTML = `<span style="color:#718096;font-weight:600;">All settled up ✓</span>`;
+    netLabel.innerHTML = `<span style="color:#718096;font-weight:700;background:rgba(113,128,150,0.12);padding:0.2rem 0.55rem;border-radius:6px;">₹0.00 (Settled Up)</span>`;
     settleBtn.style.display = 'none';
   } else if (net > 0) {
-    netLabel.innerHTML = `<span style="color:#38a169;font-weight:600;">${data.other_user.username} owes you ${fmt(net)}</span>`;
-    settleBtn.style.display = 'inline-block';
+    netLabel.innerHTML = `<span style="color:#38a169;font-weight:700;">${escapeHtml(data.other_user.username)} owes you ${fmt(net)}</span>`;
+    settleBtn.style.display = 'inline-flex';
     settleBtn.textContent = '✓ Settle Up';
   } else {
-    netLabel.innerHTML = `<span style="color:#e53e3e;font-weight:600;">You owe ${data.other_user.username} ${fmt(net)}</span>`;
-    settleBtn.style.display = 'inline-block';
+    netLabel.innerHTML = `<span style="color:#e53e3e;font-weight:700;">You owe ${escapeHtml(data.other_user.username)} ${fmt(net)}</span>`;
+    settleBtn.style.display = 'inline-flex';
     settleBtn.textContent = '✓ Settle Up';
   }
 
@@ -367,21 +507,39 @@ function renderHistoryModal(data) {
     const isPayer  = e.role === 'you_paid';
     const amt      = e.your_amount.toFixed(2);
     const color    = isPayer ? '#38a169' : '#e53e3e';
-    const label    = isPayer
-      ? `You lent ₹${amt} to ${data.other_user.username}`
-      : `You borrowed ₹${amt} from ${data.other_user.username}`;
+    const isSettlement = e.description && e.description.toLowerCase().startsWith('settlement');
+    const label    = isSettlement
+      ? (isPayer ? `You paid ₹${amt} to settle up` : `${escapeHtml(data.other_user.username)} paid ₹${amt} to settle up`)
+      : (isPayer ? `You lent ₹${amt} to ${escapeHtml(data.other_user.username)}` : `You borrowed ₹${amt} from ${escapeHtml(data.other_user.username)}`);
     const arrow    = isPayer ? '↑' : '↓';
+    const safeDesc = encodeURIComponent(e.description);
 
     return `
-      <div style="display:flex;align-items:flex-start;gap:0.9rem;padding:0.9rem 1.25rem;border-bottom:1px solid var(--border-warm);">
-        <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;flex-shrink:0;
-                    background:${isPayer ? '#e6ffed' : '#ffe5e5'};color:${color};">${arrow}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:0.9rem;color:var(--text-dark);">${e.description}</div>
-          <div style="font-size:0.77rem;color:var(--text-muted);margin-top:0.15rem;">
-            ${e.payer_name} paid ₹${parseFloat(e.total_amount).toFixed(2)} · ${e.date}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.9rem;padding:0.9rem 1.25rem;border-bottom:1px solid var(--border-warm);">
+        <div style="display:flex;align-items:flex-start;gap:0.9rem;flex:1;min-width:0;">
+          <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;flex-shrink:0;
+                      background:${isPayer ? '#e6ffed' : '#ffe5e5'};color:${color};">${arrow}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:0.9rem;color:var(--text-dark);word-break:break-word;">${escapeHtml(e.description)}</div>
+            <div style="font-size:0.77rem;color:var(--text-muted);margin-top:0.15rem;">
+              ${escapeHtml(e.payer_name)} paid ₹${parseFloat(e.total_amount).toFixed(2)} · ${e.date}
+            </div>
+            <div style="font-size:0.8rem;font-weight:600;color:${color};margin-top:0.2rem;">${label}</div>
           </div>
-          <div style="font-size:0.8rem;font-weight:600;color:${color};margin-top:0.2rem;">${label}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.35rem;flex-shrink:0;">
+          <button type="button" title="Edit Expense" onclick="openEditModal(${e.expense_id}, decodeURIComponent('${safeDesc}'), ${e.total_amount}, ${e.paid_by})"
+                  style="background:none;border:1px solid var(--border-warm);border-radius:6px;padding:0.35rem 0.55rem;cursor:pointer;color:var(--text-muted);font-size:0.85rem;line-height:1;transition:all 0.15s;"
+                  onmouseover="this.style.color='var(--accent-orange)';this.style.borderColor='var(--accent-orange)'"
+                  onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border-warm)'">
+            ✏️
+          </button>
+          <button type="button" title="Delete Expense" onclick="promptDeleteModal(${e.expense_id}, decodeURIComponent('${safeDesc}'), ${e.total_amount})"
+                  style="background:none;border:1px solid var(--border-warm);border-radius:6px;padding:0.35rem 0.55rem;cursor:pointer;color:var(--text-muted);font-size:0.85rem;line-height:1;transition:all 0.15s;"
+                  onmouseover="this.style.color='#e53e3e';this.style.borderColor='#e53e3e'"
+                  onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border-warm)'">
+            🗑️
+          </button>
         </div>
       </div>`;
   }).join('');
@@ -393,6 +551,10 @@ function closeHistoryModal() {
   document.getElementById('history-modal').style.display = 'none';
   document.body.style.overflow = '';
   _historyOtherUid = null;
+  _historyOtherName = '';
+  if (_needsPageRefresh) {
+    window.location.reload();
+  }
 }
 
 document.getElementById('history-modal').addEventListener('click', function(e) {
@@ -406,17 +568,226 @@ async function doSettleUp() {
   btn.disabled = true; btn.textContent = 'Settling…';
 
   try {
-    const res  = await fetch(`/spaces/${SPACE_ID}/expenses/settle-up/${_historyOtherUid}`, { method: 'POST' });
+    const res  = await fetch(`/spaces/${SPACE_ID}/expenses/settle-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_user_id: _historyOtherUid,
+        space_id: SPACE_ID
+      })
+    });
     const data = await res.json();
     if (data.error) { showFlash(data.error, 'danger'); return; }
-    showFlash('Settled up! 🎉', 'success');
-    closeHistoryModal();
-    setTimeout(() => window.location.reload(), 700);
+    showFlash(data.message || 'Settled up! 🎉', 'success');
+    _needsPageRefresh = true;
+    await loadHistoryData(_historyOtherUid, _historyOtherName, SPACE_ID);
   } catch (err) {
     showFlash('Network error: ' + err.message, 'danger');
   } finally {
     btn.disabled = false;
+    btn.textContent = '✓ Settle Up';
   }
 }
+
+// ── 1-on-1 Quick Expense Modal ────────────────────────────────
+function openQuickExpenseModal() {
+  if (!_historyOtherUid) return;
+  document.getElementById('quick-modal-title').textContent = `＋ Add Expense with ${_historyOtherName}`;
+  document.getElementById('quick-split-other-name').textContent = _historyOtherName;
+  document.getElementById('quick-desc').value = '';
+  document.getElementById('quick-amount').value = '';
+
+  const paidBySelect = document.getElementById('quick-paidby');
+  paidBySelect.innerHTML = `
+    <option value="${CURRENT_USER_ID}" selected>You (${CURRENT_USER_NAME})</option>
+    <option value="${_historyOtherUid}">${escapeHtml(_historyOtherName)}</option>
+  `;
+
+  updateQuickSplitPreview();
+  document.getElementById('quick-expense-modal').style.display = 'block';
+}
+
+function closeQuickExpenseModal() {
+  document.getElementById('quick-expense-modal').style.display = 'none';
+}
+
+function updateQuickSplitPreview() {
+  const amt = parseFloat(document.getElementById('quick-amount').value) || 0;
+  const half = (amt / 2).toFixed(2);
+  const preview = document.getElementById('quick-split-preview');
+  if (amt <= 0) {
+    preview.innerHTML = `Split equally between you and <b>${escapeHtml(_historyOtherName)}</b> (₹0.00 each)`;
+  } else {
+    preview.innerHTML = `<b>₹${half}</b> each &nbsp;·&nbsp; 50/50 split between you and <b>${escapeHtml(_historyOtherName)}</b>`;
+  }
+}
+
+async function submitQuickExpense(event) {
+  event.preventDefault();
+  const btn = document.getElementById('quick-submit-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const desc = document.getElementById('quick-desc').value.trim();
+  const amount = parseFloat(document.getElementById('quick-amount').value);
+  const paidBy = parseInt(document.getElementById('quick-paidby').value);
+
+  if (!desc || isNaN(amount) || amount <= 0) {
+    showFlash('Please enter a valid description and amount.', 'danger');
+    btn.disabled = false;
+    btn.textContent = 'Save Expense';
+    return;
+  }
+
+  const half = parseFloat((amount / 2).toFixed(2));
+  const otherShare = parseFloat((amount - half).toFixed(2));
+  const splits = {
+    [CURRENT_USER_ID]: half,
+    [_historyOtherUid]: otherShare
+  };
+
+  try {
+    const res = await fetch(`/spaces/${SPACE_ID}/expenses/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description: desc,
+        amount: amount,
+        paid_by: paidBy,
+        split_type: 'manual',
+        splits: splits
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      showFlash(data.error, 'danger');
+      return;
+    }
+    showFlash(`Expense added with ${_historyOtherName}! 🎉`, 'success');
+    closeQuickExpenseModal();
+    _needsPageRefresh = true;
+    await loadHistoryData(_historyOtherUid, _historyOtherName, SPACE_ID);
+  } catch (err) {
+    showFlash('Network error: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Expense';
+  }
+}
+
+// ── Edit Expense Modal ────────────────────────────────────────
+function openEditModal(expenseId, desc, amount, paidBy) {
+  document.getElementById('edit-expense-id').value = expenseId;
+  document.getElementById('edit-desc').value = desc;
+  document.getElementById('edit-amount').value = parseFloat(amount).toFixed(2);
+  const paidSelect = document.getElementById('edit-paidby');
+  if (paidSelect) paidSelect.value = paidBy;
+  document.getElementById('edit-expense-modal').style.display = 'block';
+}
+
+function closeEditModal() {
+  document.getElementById('edit-expense-modal').style.display = 'none';
+}
+
+async function submitEditExpense(event) {
+  event.preventDefault();
+  const btn = document.getElementById('edit-submit-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const expenseId = document.getElementById('edit-expense-id').value;
+  const desc = document.getElementById('edit-desc').value.trim();
+  const amount = parseFloat(document.getElementById('edit-amount').value);
+  const paidBy = parseInt(document.getElementById('edit-paidby').value);
+
+  if (!desc || isNaN(amount) || amount <= 0) {
+    showFlash('Please provide a valid description and amount.', 'danger');
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+    return;
+  }
+
+  try {
+    const res = await fetch(`/spaces/${SPACE_ID}/expenses/edit-expense/${expenseId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description: desc,
+        amount: amount,
+        paid_by: paidBy
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      showFlash(data.error, 'danger');
+      return;
+    }
+    showFlash('Expense updated successfully! 🎉', 'success');
+    closeEditModal();
+    _needsPageRefresh = true;
+    await loadHistoryData(_historyOtherUid, _historyOtherName, SPACE_ID);
+  } catch (err) {
+    showFlash('Network error: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+  }
+}
+
+// ── Delete Expense Modal ──────────────────────────────────────
+function promptDeleteModal(expenseId, desc, amount) {
+  _deletingExpenseId = expenseId;
+  document.getElementById('delete-desc-preview').textContent = desc;
+  document.getElementById('delete-amt-preview').textContent = '₹' + parseFloat(amount).toFixed(2);
+  document.getElementById('delete-expense-modal').style.display = 'block';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-expense-modal').style.display = 'none';
+  _deletingExpenseId = null;
+}
+
+async function executeDeleteExpense() {
+  if (!_deletingExpenseId) return;
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+
+  try {
+    const res = await fetch(`/spaces/${SPACE_ID}/expenses/delete-expense/${_deletingExpenseId}`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (data.error) {
+      showFlash(data.error, 'danger');
+      return;
+    }
+    showFlash('Expense deleted successfully.', 'success');
+    closeDeleteModal();
+    _needsPageRefresh = true;
+    await loadHistoryData(_historyOtherUid, _historyOtherName, SPACE_ID);
+  } catch (err) {
+    showFlash('Network error: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+  }
+}
+
+// Backdrop clicks for sub-modals
+['quick-expense-modal', 'edit-expense-modal', 'delete-expense-modal'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('click', function(e) {
+      if (e.target === this) {
+        if (id === 'quick-expense-modal') closeQuickExpenseModal();
+        else if (id === 'edit-expense-modal') closeEditModal();
+        else if (id === 'delete-expense-modal') closeDeleteModal();
+      }
+    });
+  }
+});
 </script>
 {% endblock %}
