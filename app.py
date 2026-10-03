@@ -204,6 +204,11 @@ def create_app():
         from routes.expenses import edit_expense_endpoint
         return edit_expense_endpoint(expense_id)
 
+    @app.route("/add-expense", methods=["POST"])
+    def app_add_expense():
+        from routes.expenses import add_expense_endpoint
+        return add_expense_endpoint()
+
     # ── Error handlers ────────────────────────────────────────
     @app.errorhandler(403)
     def forbidden(e):

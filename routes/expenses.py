@@ -223,17 +223,22 @@ def pairwise_history(space_id, other_uid):
 
 
 # ──────────────────────────────────────────────────────────────
-# POST /spaces/<id>/expenses/add
+# Core Expense Creation & POST /spaces/<id>/expenses/add
 # ──────────────────────────────────────────────────────────────
-@expenses_bp.route("/add", methods=["POST"])
-@login_required
-@space_member_required
-def add_expense(space_id):
-    data          = request.get_json(silent=True) or {}
+
+def add_expense_core(space_id: int, data: dict):
+    me = session.get("user_id")
+    if not me:
+        return jsonify({"error": "Unauthorized"}), 401
+
     description   = data.get("description", "").strip()
-    amount        = float(data.get("amount", 0))
-    paid_by       = int(data.get("paid_by", session["user_id"]))
-    split_type    = data.get("split_type", "equal")   # "equal" | "manual"
+    try:
+        amount = round(float(data.get("amount", 0)), 2)
+    except (ValueError, TypeError):
+        amount = 0.0
+
+    paid_by       = int(data.get("paid_by", me))
+    split_type    = data.get("split_type", "equal")   # "equal" | "full" | "manual"
     manual_splits = data.get("splits", {})             # {str(user_id): amount}
     split_among   = data.get("split_among", [])        # list of user_ids for equal split
 
@@ -250,6 +255,14 @@ def add_expense(space_id):
                 (space_id,), action_label="EXPENSE_ALL_MEMBERS", fetch="all"
             )
             member_ids = [m["user_id"] for m in all_members]
+    elif split_type == "full":
+        if split_among:
+            member_ids = [int(uid) for uid in split_among]
+        elif manual_splits:
+            member_ids = [int(k) for k in manual_splits.keys()]
+        else:
+            target_uid = data.get("target_user_id") or data.get("receiver_id")
+            member_ids = [paid_by] + ([int(target_uid)] if target_uid and int(target_uid) != paid_by else [])
     else:
         member_ids = [int(k) for k in manual_splits.keys()]
 
@@ -259,7 +272,7 @@ def add_expense(space_id):
     # Validate manual splits
     if split_type == "manual":
         total_manual = sum(float(v) for v in manual_splits.values())
-        if abs(total_manual - amount) > 0.01:
+        if abs(total_manual - amount) > 0.05:
             return jsonify({"error": f"Manual splits ({total_manual:.2f}) must equal total ({amount:.2f})."}), 400
 
     # Deduplication guard (10-second window)
@@ -268,7 +281,7 @@ def add_expense(space_id):
            WHERE space_id = %s AND description = %s AND amount = %s
              AND paid_by = %s AND created_by = %s
              AND created_at >= NOW() - INTERVAL 10 SECOND""",
-        (space_id, description, amount, paid_by, session["user_id"]),
+        (space_id, description, amount, paid_by, me),
         fetch="one", action_label="EXPENSE_DEDUP"
     )
     if recent:
@@ -281,7 +294,7 @@ def add_expense(space_id):
 
         cursor.execute(
             "INSERT INTO expenses (space_id, description, amount, paid_by, created_by) VALUES (%s,%s,%s,%s,%s)",
-            (space_id, description, amount, paid_by, session["user_id"])
+            (space_id, description, amount, paid_by, me)
         )
         expense_id = cursor.lastrowid
 
@@ -293,6 +306,24 @@ def add_expense(space_id):
                 cursor.execute(
                     "INSERT INTO expense_splits (expense_id, user_id, share_amount) VALUES (%s,%s,%s)",
                     (expense_id, uid, actual_share)
+                )
+        elif split_type == "full":
+            target_uid = data.get("target_user_id") or data.get("receiver_id")
+            if target_uid and int(target_uid) != paid_by:
+                receiver_id = int(target_uid)
+            else:
+                other_members = [uid for uid in member_ids if uid != paid_by]
+                receiver_id = other_members[0] if other_members else paid_by
+
+            # Payer pays for Receiver. Payer's share = 0.00, Receiver's share = 100% of amount.
+            cursor.execute(
+                "INSERT INTO expense_splits (expense_id, user_id, share_amount) VALUES (%s,%s,%s)",
+                (expense_id, paid_by, 0.00)
+            )
+            if receiver_id != paid_by:
+                cursor.execute(
+                    "INSERT INTO expense_splits (expense_id, user_id, share_amount) VALUES (%s,%s,%s)",
+                    (expense_id, receiver_id, amount)
                 )
         else:
             for uid_str, share_val in manual_splits.items():
@@ -312,7 +343,7 @@ def add_expense(space_id):
         notif_rows = [
             (uid, f"New expense '{description}' added in '{space_row['name']}'.")
             for uid in member_ids
-            if uid != session["user_id"]
+            if uid != me
         ]
         if notif_rows:
             notif_cur = db.get_db().cursor()
@@ -326,6 +357,15 @@ def add_expense(space_id):
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+@expenses_bp.route("/add", methods=["POST"])
+@login_required
+@space_member_required
+def add_expense(space_id):
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    return add_expense_core(space_id, data)
+
 
 
 # ──────────────────────────────────────────────────────────────
@@ -655,4 +695,27 @@ def delete_expense_endpoint(expense_id: int):
 
 def edit_expense_endpoint(expense_id: int):
     return process_edit_expense(expense_id)
+
+
+def add_expense_endpoint():
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    space_id = data.get("space_id") or request.args.get("space_id")
+    if not space_id:
+        me = session.get("user_id")
+        target_uid = data.get("target_user_id")
+        if me and target_uid:
+            shared = db.run_query(
+                """SELECT sm1.space_id FROM space_members sm1
+                   JOIN space_members sm2 ON sm1.space_id = sm2.space_id
+                   WHERE sm1.user_id = %s AND sm2.user_id = %s
+                   LIMIT 1""",
+                (me, target_uid),
+                fetch="one", action_label="ADD_EXP_FIND_SPACE"
+            )
+            if shared:
+                space_id = shared["space_id"]
+    if not space_id:
+        return jsonify({"error": "space_id is required."}), 400
+    return add_expense_core(int(space_id), data)
+
 

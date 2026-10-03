@@ -211,7 +211,7 @@
 <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- MODAL 3: Direct 1-on-1 Quick Expense                        -->
 <!-- ═══════════════════════════════════════════════════════════ -->
-<div id="quick-expense-modal" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);overflow-y:auto;">
+<div id="addExpenseWithMemberModal" class="quick-expense-modal" style="display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);overflow-y:auto;">
   <div style="margin:2.5rem auto;max-width:480px;background:var(--bg-card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.3);border:1px solid var(--border-warm);overflow:hidden;">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;border-bottom:1px solid var(--border-warm);">
       <h3 id="quick-modal-title" style="margin:0;font-size:1.1rem;font-weight:700;">＋ Add Expense with Member</h3>
@@ -228,18 +228,44 @@
       </div>
       <div class="form-group" style="margin:0;">
         <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Paid By</label>
-        <select id="quick-paidby" class="form-control" style="margin-top:0.4rem;">
+        <select id="quick-paidby" class="form-control" style="margin-top:0.4rem;" onchange="updateQuickSplitPreview()">
           <!-- Dynamically populated -->
         </select>
       </div>
 
-      <!-- Strict 50/50 Split Box -->
-      <div style="background:rgba(252,108,38,0.08);border:1px solid rgba(252,108,38,0.3);border-radius:10px;padding:0.8rem 1rem;">
-        <div style="font-size:0.78rem;font-weight:700;color:var(--accent-orange);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.25rem;">
-          🤝 Split (50/50 Equal)
+      <!-- Split Type Selector (Pill Toggle Buttons) -->
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.45rem;display:block;">
+          Split Option
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;">
+          <label id="split-pill-equal"
+                 style="display:flex;flex-direction:column;gap:0.2rem;padding:0.75rem 0.9rem;border-radius:10px;border:2px solid var(--accent-orange);background:rgba(252,108,38,0.1);cursor:pointer;transition:all 0.15s;">
+            <div style="display:flex;align-items:center;gap:0.45rem;font-weight:700;font-size:0.88rem;color:var(--text-dark);">
+              <input type="radio" name="quick_split_type" id="quick-split-equal" value="equal" checked onchange="updateQuickSplitPreview()" style="accent-color:var(--accent-orange);margin:0;cursor:pointer;" />
+              <span>Split 50/50</span>
+            </div>
+            <span style="font-size:0.74rem;color:var(--text-muted);padding-left:1.35rem;">Equal share</span>
+          </label>
+
+          <label id="split-pill-full"
+                 style="display:flex;flex-direction:column;gap:0.2rem;padding:0.75rem 0.9rem;border-radius:10px;border:1px solid var(--border-warm);background:var(--bg-main);cursor:pointer;transition:all 0.15s;">
+            <div style="display:flex;align-items:center;gap:0.45rem;font-weight:700;font-size:0.88rem;color:var(--text-dark);">
+              <input type="radio" name="quick_split_type" id="quick-split-full" value="full" onchange="updateQuickSplitPreview()" style="accent-color:var(--accent-orange);margin:0;cursor:pointer;" />
+              <span>Full Amount</span>
+            </div>
+            <span style="font-size:0.74rem;color:var(--text-muted);padding-left:1.35rem;">No split (100%)</span>
+          </label>
         </div>
-        <div id="quick-split-preview" style="font-size:0.88rem;color:var(--text-dark);font-weight:500;">
-          Split equally between you and <span id="quick-split-other-name">Member</span> (₹0.00 each)
+      </div>
+
+      <!-- Dynamic Helper / Summary Text Box -->
+      <div id="quick-split-box" style="background:rgba(252,108,38,0.08);border:1px solid rgba(252,108,38,0.3);border-radius:10px;padding:0.85rem 1rem;transition:all 0.2s;">
+        <div id="quick-split-badge" style="font-size:0.75rem;font-weight:700;color:var(--accent-orange);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.25rem;">
+          🤝 Split 50/50 (Equal Share)
+        </div>
+        <div id="quick-split-preview" style="font-size:0.9rem;color:var(--text-dark);font-weight:600;">
+          Split equally: Each person's share is ₹0.00.
         </div>
       </div>
 
@@ -593,9 +619,11 @@ async function doSettleUp() {
 function openQuickExpenseModal() {
   if (!_historyOtherUid) return;
   document.getElementById('quick-modal-title').textContent = `＋ Add Expense with ${_historyOtherName}`;
-  document.getElementById('quick-split-other-name').textContent = _historyOtherName;
   document.getElementById('quick-desc').value = '';
   document.getElementById('quick-amount').value = '';
+
+  const equalRadio = document.getElementById('quick-split-equal');
+  if (equalRadio) equalRadio.checked = true;
 
   const paidBySelect = document.getElementById('quick-paidby');
   paidBySelect.innerHTML = `
@@ -604,21 +632,60 @@ function openQuickExpenseModal() {
   `;
 
   updateQuickSplitPreview();
-  document.getElementById('quick-expense-modal').style.display = 'block';
+  const modal = document.getElementById('addExpenseWithMemberModal') || document.getElementById('quick-expense-modal');
+  if (modal) modal.style.display = 'block';
 }
 
 function closeQuickExpenseModal() {
-  document.getElementById('quick-expense-modal').style.display = 'none';
+  const modal = document.getElementById('addExpenseWithMemberModal') || document.getElementById('quick-expense-modal');
+  if (modal) modal.style.display = 'none';
 }
 
 function updateQuickSplitPreview() {
-  const amt = parseFloat(document.getElementById('quick-amount').value) || 0;
-  const half = (amt / 2).toFixed(2);
+  const amtVal = parseFloat(document.getElementById('quick-amount').value);
+  const amt = (!isNaN(amtVal) && amtVal > 0) ? amtVal : 0;
+  const formattedAmt = amt.toFixed(2);
+  const splitType = document.querySelector('input[name="quick_split_type"]:checked')?.value || 'equal';
+  const paidBy = parseInt(document.getElementById('quick-paidby').value);
   const preview = document.getElementById('quick-split-preview');
-  if (amt <= 0) {
-    preview.innerHTML = `Split equally between you and <b>${escapeHtml(_historyOtherName)}</b> (₹0.00 each)`;
+  const badge = document.getElementById('quick-split-badge');
+  const pillEqual = document.getElementById('split-pill-equal');
+  const pillFull = document.getElementById('split-pill-full');
+
+  if (splitType === 'equal') {
+    if (pillEqual) {
+      pillEqual.style.borderColor = 'var(--accent-orange)';
+      pillEqual.style.background = 'rgba(252,108,38,0.1)';
+      pillEqual.style.borderWidth = '2px';
+    }
+    if (pillFull) {
+      pillFull.style.borderColor = 'var(--border-warm)';
+      pillFull.style.background = 'var(--bg-main)';
+      pillFull.style.borderWidth = '1px';
+    }
+    if (badge) badge.textContent = '🤝 Split 50/50 (Equal Share)';
+
+    const half = (amt / 2).toFixed(2);
+    preview.textContent = `Split equally: Each person's share is ₹${half}.`;
   } else {
-    preview.innerHTML = `<b>₹${half}</b> each &nbsp;·&nbsp; 50/50 split between you and <b>${escapeHtml(_historyOtherName)}</b>`;
+    // Full Amount (No Split — Payer paid for Receiver)
+    if (pillFull) {
+      pillFull.style.borderColor = 'var(--accent-orange)';
+      pillFull.style.background = 'rgba(252,108,38,0.1)';
+      pillFull.style.borderWidth = '2px';
+    }
+    if (pillEqual) {
+      pillEqual.style.borderColor = 'var(--border-warm)';
+      pillEqual.style.background = 'var(--bg-main)';
+      pillEqual.style.borderWidth = '1px';
+    }
+    if (badge) badge.textContent = '💳 Full Amount (No Split — Payer paid for Receiver)';
+
+    if (paidBy === CURRENT_USER_ID) {
+      preview.textContent = `${_historyOtherName} owes you the full ₹${formattedAmt}.`;
+    } else {
+      preview.textContent = `You owe ${_historyOtherName} the full ₹${formattedAmt}.`;
+    }
   }
 }
 
@@ -632,6 +699,7 @@ async function submitQuickExpense(event) {
   const desc = document.getElementById('quick-desc').value.trim();
   const amount = parseFloat(document.getElementById('quick-amount').value);
   const paidBy = parseInt(document.getElementById('quick-paidby').value);
+  const splitType = document.querySelector('input[name="quick_split_type"]:checked')?.value || 'equal';
 
   if (!desc || isNaN(amount) || amount <= 0) {
     showFlash('Please enter a valid description and amount.', 'danger');
@@ -640,12 +708,28 @@ async function submitQuickExpense(event) {
     return;
   }
 
-  const half = parseFloat((amount / 2).toFixed(2));
-  const otherShare = parseFloat((amount - half).toFixed(2));
-  const splits = {
-    [CURRENT_USER_ID]: half,
-    [_historyOtherUid]: otherShare
-  };
+  let splits = {};
+  if (splitType === 'equal') {
+    const half = parseFloat((amount / 2).toFixed(2));
+    const otherShare = parseFloat((amount - half).toFixed(2));
+    splits = {
+      [CURRENT_USER_ID]: half,
+      [_historyOtherUid]: otherShare
+    };
+  } else {
+    // Full amount: payer share = 0.00, receiver share = amount
+    if (paidBy === CURRENT_USER_ID) {
+      splits = {
+        [CURRENT_USER_ID]: 0.00,
+        [_historyOtherUid]: amount
+      };
+    } else {
+      splits = {
+        [_historyOtherUid]: 0.00,
+        [CURRENT_USER_ID]: amount
+      };
+    }
+  }
 
   try {
     const res = await fetch(`/spaces/${SPACE_ID}/expenses/add`, {
@@ -655,7 +739,9 @@ async function submitQuickExpense(event) {
         description: desc,
         amount: amount,
         paid_by: paidBy,
-        split_type: 'manual',
+        split_type: splitType,
+        target_user_id: _historyOtherUid,
+        split_among: [CURRENT_USER_ID, _historyOtherUid],
         splits: splits
       })
     });
@@ -675,6 +761,7 @@ async function submitQuickExpense(event) {
     btn.textContent = 'Save Expense';
   }
 }
+
 
 // ── Edit Expense Modal ────────────────────────────────────────
 function openEditModal(expenseId, desc, amount, paidBy) {
@@ -777,12 +864,12 @@ async function executeDeleteExpense() {
 }
 
 // Backdrop clicks for sub-modals
-['quick-expense-modal', 'edit-expense-modal', 'delete-expense-modal'].forEach(id => {
+['addExpenseWithMemberModal', 'quick-expense-modal', 'edit-expense-modal', 'delete-expense-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     el.addEventListener('click', function(e) {
       if (e.target === this) {
-        if (id === 'quick-expense-modal') closeQuickExpenseModal();
+        if (id === 'addExpenseWithMemberModal' || id === 'quick-expense-modal') closeQuickExpenseModal();
         else if (id === 'edit-expense-modal') closeEditModal();
         else if (id === 'delete-expense-modal') closeDeleteModal();
       }
